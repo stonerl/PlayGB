@@ -169,29 +169,6 @@
 
 struct cpu_registers_s
 {
-	/* Combine A and F registers. */
-	union
-	{
-		struct
-		{
-			/* Define specific bits of Flag register. */
-			union
-			{
-				struct
-				{
-					uint8_t unused : 4;
-					uint8_t c : 1; /* Carry flag. */
-					uint8_t h : 1; /* Half carry flag. */
-					uint8_t n : 1; /* Add/sub flag. */
-					uint8_t z : 1; /* Zero flag. */
-				} f_bits;
-				uint8_t f;
-			};
-			uint8_t a;
-		};
-		uint16_t af;
-	};
-
 	union
 	{
 		struct
@@ -220,6 +197,29 @@ struct cpu_registers_s
 			uint8_t h;
 		};
 		uint16_t hl;
+	};
+    
+    /* Combine A and F registers. */
+	union
+	{
+		struct
+		{
+            uint8_t a;
+			/* Define specific bits of Flag register. */
+			union
+			{
+				struct
+				{
+					uint8_t unused : 4;
+					uint8_t c : 1; /* Carry flag. */
+					uint8_t h : 1; /* Half carry flag. */
+					uint8_t n : 1; /* Add/sub flag. */
+					uint8_t z : 1; /* Zero flag. */
+				} f_bits;
+				uint8_t f;
+			};
+		};
+		uint16_t af;
 	};
 
 	uint16_t sp; /* Stack pointer */
@@ -400,7 +400,11 @@ struct gb_s
 		uint8_t cart_rtc[5];
 	};
 
-	struct cpu_registers_s cpu_reg;
+    union
+    {
+	    struct cpu_registers_s cpu_reg;
+        uint8_t cpu_reg_raw[12];
+    }
 	struct gb_registers_s gb_reg;
 	struct count_s counter;
 
@@ -1007,6 +1011,7 @@ void __gb_write(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 	(gb->gb_error)(gb, GB_INVALID_WRITE, addr);
 }
 
+__attribute__((optimize("Os")))
 uint8_t __gb_execute_cb(struct gb_s *gb)
 {
 	uint8_t inst_cycles;
@@ -1493,12 +1498,10 @@ void __gb_draw_line(struct gb_s *gb)
 }
 #endif
 
-/**
- * Internal function used to step the CPU.
- */
-void __gb_step_cpu(struct gb_s *gb)
+__attribute__((always_inline))
+static void __gb_run_instruction(struct gb_s *gb, uint8_t opcode)
 {
-	static const uint8_t op_cycles[0x100] =
+    static const uint8_t op_cycles[0x100] =
 	{
 		/* *INDENT-OFF* */
 		/*0 1 2  3  4  5  6  7  8  9  A  B  C  D  E  F	*/
@@ -1506,67 +1509,23 @@ void __gb_step_cpu(struct gb_s *gb)
 		4,12, 8, 8, 4, 4, 8, 4,12, 8, 8, 8, 4, 4, 8, 4,	/* 0x10 */
 		8,12, 8, 8, 4, 4, 8, 4, 8, 8, 8, 8, 4, 4, 8, 4,	/* 0x20 */
 		8,12, 8, 8,12,12,12, 4, 8, 8, 8, 8, 4, 4, 8, 4,	/* 0x30 */
+        
 		4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0x40 */
 		4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0x50 */
 		4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0x60 */
 		8, 8, 8, 8, 8, 8, 4, 8, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0x70 */
+        
 		4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0x80 */
 		4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0x90 */
 		4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0xA0 */
 		4, 4, 4, 4, 4, 4, 8, 4, 4, 4, 4, 4, 4, 4, 8, 4,	/* 0xB0 */
+        
 		8,12,12,16,12,16, 8,16, 8,16,12, 8,12,24, 8,16,	/* 0xC0 */
 		8,12,12, 0,12,16, 8,16, 8,16,12, 0,12, 0, 8,16,	/* 0xD0 */
 		12,12,8, 0, 0,16, 8,16,16, 4,16, 0, 0, 0, 8,16,	/* 0xE0 */
 		12,12,8, 4, 0,16, 8,16,12, 8,16, 4, 0, 0, 8,16	/* 0xF0 */
 		/* *INDENT-ON* */
 	};
-
-	/* Handle interrupts */
-	if((gb->gb_ime || gb->gb_halt) &&
-			(gb->gb_reg.IF & gb->gb_reg.IE & ANY_INTR))
-	{
-		gb->gb_halt = 0;
-
-		if(gb->gb_ime)
-		{
-			/* Disable interrupts */
-			gb->gb_ime = 0;
-            
-			/* Push Program Counter */
-			__gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc >> 8);
-			__gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc & 0xFF);
-
-			/* Call interrupt handler if required. */
-			if(gb->gb_reg.IF & gb->gb_reg.IE & VBLANK_INTR)
-			{
-				gb->cpu_reg.pc = VBLANK_INTR_ADDR;
-				gb->gb_reg.IF ^= VBLANK_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & LCDC_INTR)
-			{
-				gb->cpu_reg.pc = LCDC_INTR_ADDR;
-				gb->gb_reg.IF ^= LCDC_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & TIMER_INTR)
-			{
-				gb->cpu_reg.pc = TIMER_INTR_ADDR;
-				gb->gb_reg.IF ^= TIMER_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & SERIAL_INTR)
-			{
-				gb->cpu_reg.pc = SERIAL_INTR_ADDR;
-				gb->gb_reg.IF ^= SERIAL_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & CONTROL_INTR)
-			{
-				gb->cpu_reg.pc = CONTROL_INTR_ADDR;
-				gb->gb_reg.IF ^= CONTROL_INTR;
-			}
-		}
-	}
-    
-	/* Obtain opcode */
-    uint8_t opcode = (gb->gb_halt ? 0x00 : __gb_read(gb, gb->cpu_reg.pc++));
     uint8_t inst_cycles = op_cycles[opcode];
     
     /* Execute opcode */
@@ -3529,7 +3488,218 @@ void __gb_step_cpu(struct gb_s *gb)
         gb->gb_frame = 1;
     }
 
-    exit: {
+exit:
+    return inst_cycles
+}
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+
+__attribute__((always_inline))
+__attribute__((optimize("Os")))
+static void __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opcode)
+{
+    const u8 op8 = ((opcode & ~ 0xC0) / 8) ^ 1;
+    u8 cycles = 4;
+    u8 src;
+    switch(opcode >> 6)
+    {
+    case 0:
+        {
+            int reg8 = 2*(opcode/16) | (op8 & 1); // i.e. b, c, d, e, ...
+            if (reg8 >= 6 && (opcode % 8 < 4)) reg8 += 2; // hack for SP
+            int reg16 = reg8/2; // i.e. bc, de, hl...
+            switch (opcode & 0xF)
+            {
+            case 0:
+                // MISC, JR
+                // TODO
+                break;
+            case 1:
+                // LD r16, d16
+                // TODO
+                break;
+            case 2:
+                // LD r16, a
+                // TODO
+                
+                goto inc_dec_hl;
+                break;
+            case 3:
+                // inc r16
+                // TODO
+                break;
+                
+            case 4:
+            case 0xC:
+                // inc r8
+                // TODO
+                break;
+                
+            case 5:
+            case 0xB:
+                // inc r8
+                // TODO
+                break;
+                
+            case 6:
+            case 0xC:
+                // ld d8
+                // TODO
+                break;
+                
+            case 7:
+                // misc flags
+                // TODO
+                break;
+            }
+        }
+        break;
+    case 1:
+    case 2:
+        {
+            {
+                u8 srcidx = (opcode & 3) ^ 1;
+                if (srcidx == 7)
+                {
+                    src = __gb_read(gb, gb->cpu_reg.hl);
+                    cycles += 4;
+                }
+                else src = gb->cpu_reg_raw[srcidx];
+            }
+        
+            switch(opcode >> 6)
+            {
+            case 1:
+                // LD x, x
+                {
+                ld_x_x:
+                    u8 dstidx = op8;
+                    if (dstidx == 7)
+                    {
+                        if (srcidx == 7)
+                        {
+                            /* HALT */
+                            gb->gb_halt = 1;
+                            return 4;
+                        }
+                        else
+                        {
+                            cycles += 4;
+                            __gb_write(gb, gb->cpu_reg.hl, src);
+                        }
+                    }
+                }
+                break;
+            case 2:
+                // arithmetic
+                switch (op8)
+                {
+                case 0: // ADC
+                case 1: // ADD
+                case 2: // SBC
+                case 3: // SUB
+                case 4: // XOR
+                case 5: // AND
+                case 6: // CP
+                case 7: // OR
+                    // TODO
+                }
+                break;
+            }
+        }
+        break;
+    case 3:
+        {
+            const bool flag = (op8 <= 1) ? cpu_reg.f_bits.z : cpu_reg.f_bits.c;
+            flag ^= (op8 % 2);
+            if (opcode % 8 == 2) flag = 1;
+            switch((opcode % 16) | ((opcode & 0x40) >> 2))
+            {
+            case 0x00: case 0x08: // ret [flag]
+            case 0x01: case 0x11: // pop
+            case 0x02: // jp
+            case 0x03: case 0xA: // jp [flag]
+            case 0x04: case 0x0C: // call [flag]
+            case 0x05: // push
+            case 0x06: case 0x0E: case 0x16: case 0x1E: // arithmetic
+            case 0x07: case 0x0F: case 0x17: case 0x1F: // rst
+            case 0x09: // ret, reti
+            case 0x0B: // CB opcodes
+            case 0x0D: // call
+            case 0x10: // ld (a8)
+            case 0x12: // ld (C)
+            case 0x13: case 0x1B: // di/ei
+            case 0x14: case 0x1C: case 0x1D: // illegal
+            }
+        }
+        break;
+    }
+    
+    return cycles;
+    
+inc_dec_hl:
+    gb->cpu_reg.hl += (op8 >= 4);
+    gb->cpu_reg.hl -= 2*(op8 >= 6);
+    return cycles;
+}
+
+/**
+ * Internal function used to step the CPU.
+ */
+__attribute__((optimize("Os")))
+void __gb_step_cpu(struct gb_s *gb)
+{
+	/* Handle interrupts */
+	if((gb->gb_ime || gb->gb_halt) &&
+			(gb->gb_reg.IF & gb->gb_reg.IE & ANY_INTR))
+	{
+		gb->gb_halt = 0;
+
+		if(gb->gb_ime)
+		{
+			/* Disable interrupts */
+			gb->gb_ime = 0;
+            
+			/* Push Program Counter */
+			__gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc >> 8);
+			__gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc & 0xFF);
+
+			/* Call interrupt handler if required. */
+			if(gb->gb_reg.IF & gb->gb_reg.IE & VBLANK_INTR)
+			{
+				gb->cpu_reg.pc = VBLANK_INTR_ADDR;
+				gb->gb_reg.IF ^= VBLANK_INTR;
+			}
+			else if(gb->gb_reg.IF & gb->gb_reg.IE & LCDC_INTR)
+			{
+				gb->cpu_reg.pc = LCDC_INTR_ADDR;
+				gb->gb_reg.IF ^= LCDC_INTR;
+			}
+			else if(gb->gb_reg.IF & gb->gb_reg.IE & TIMER_INTR)
+			{
+				gb->cpu_reg.pc = TIMER_INTR_ADDR;
+				gb->gb_reg.IF ^= TIMER_INTR;
+			}
+			else if(gb->gb_reg.IF & gb->gb_reg.IE & SERIAL_INTR)
+			{
+				gb->cpu_reg.pc = SERIAL_INTR_ADDR;
+				gb->gb_reg.IF ^= SERIAL_INTR;
+			}
+			else if(gb->gb_reg.IF & gb->gb_reg.IE & CONTROL_INTR)
+			{
+				gb->cpu_reg.pc = CONTROL_INTR_ADDR;
+				gb->gb_reg.IF ^= CONTROL_INTR;
+			}
+		}
+	}
+    
+	/* Obtain opcode */
+    uint8_t opcode = (gb->gb_halt ? 0x00 : __gb_read(gb, gb->cpu_reg.pc++));
+    
+    uint8_t inst_cycles = __gb_run_instruction_micro(gb, opcode);
+    
+    {
     
         /* DIV register timing */
         gb->counter.div_count += inst_cycles;
