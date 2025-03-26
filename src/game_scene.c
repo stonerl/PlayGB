@@ -14,14 +14,6 @@
 
 PGB_GameScene *audioGameScene = NULL;
 
-#if defined(__arm__) && defined(TARGET_PLAYDATE)
-extern char __my_section_start[];
-extern char __my_section_end[];
-#else
-char __my_section_start[];
-char __my_section_end[];
-#endif
-
 typedef struct PGB_GameSceneContext {
     PGB_GameScene *scene;
     struct gb_s gb;

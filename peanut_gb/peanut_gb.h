@@ -159,8 +159,6 @@
 #define OBJ_FLIP_X          0x20
 #define OBJ_PALETTE         0x10
 
-#define PGB_CANARY 0xCAFEDEAD01234784
-
 #define ROM_HEADER_CHECKSUM_LOC	0x014D
 
 #ifndef MIN
@@ -342,7 +340,6 @@ static uint8_t gb_back_fb[LCD_HEIGHT][LCD_WIDTH];
  */
 struct gb_s
 {
-    uint64_t canary_start;
     uint8_t *gb_rom;
     uint8_t *gb_cart_ram;
 
@@ -408,8 +405,8 @@ struct gb_s
 	struct count_s counter;
 
 	/* TODO: Allow implementation to allocate WRAM, VRAM and Frame Buffer. */
-    uint8_t wram[WRAM_SIZE];
-    uint8_t vram[VRAM_SIZE];
+    uint8_t *wram; // wram[WRAM_SIZE];
+    uint8_t *vram; // vram[VRAM_SIZE];
 	uint8_t hram[HRAM_SIZE];
 	uint8_t oam[OAM_SIZE];
 
@@ -483,7 +480,6 @@ struct gb_s
 		/* Implementation defined data. Set to NULL if not required. */
 		void *priv;
 	} direct;
-    uint64_t canary_end;
 };
 
 /**
@@ -538,7 +534,6 @@ void gb_set_rtc(struct gb_s *gb, const struct tm * const time)
 /**
  * Internal function used to read bytes.
  */
-__attribute__((section(".itcm"))) 
 uint8_t __gb_read(struct gb_s *gb, const uint_fast16_t addr)
 {
 	switch(addr >> 12)
@@ -718,7 +713,6 @@ uint8_t __gb_read(struct gb_s *gb, const uint_fast16_t addr)
 /**
  * Internal function used to write bytes.
  */
-__attribute__((section(".itcm"))) 
 void __gb_write(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 {
 	switch(addr >> 12)
@@ -1013,7 +1007,6 @@ void __gb_write(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 	(gb->gb_error)(gb, GB_INVALID_WRITE, addr);
 }
 
-__attribute__((section(".itcm"))) 
 uint8_t __gb_execute_cb(struct gb_s *gb)
 {
 	uint8_t inst_cycles;
