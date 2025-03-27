@@ -32,11 +32,25 @@
 #ifndef PEANUT_GB_H
 #define PEANUT_GB_H
 
+#ifdef TARGET_SIMULATOR
+    #define CPU_VALIDATE 1
+#endif
+
 #include "version.all"	/* Version information */
 #include <stdlib.h>	/* Required for qsort */
 #include <stdint.h>	/* Required for int types */
 #include <string.h>	/* Required for memset */
 #include <time.h>	/* Required for tm struct */
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef int8_t s8;
+typedef int16_t s16;
+
+#define likely(x)       (__builtin_expect(!!(x), 1))
+#define unlikely(x)     (__builtin_expect(!!(x), 0))
+
 
 /**
  * Sound support must be provided by an external library. When audio_read() and
@@ -404,7 +418,8 @@ struct gb_s
     {
 	    struct cpu_registers_s cpu_reg;
         uint8_t cpu_reg_raw[12];
-    }
+        uint16_t cpu_reg_raw16[6];
+    };
 	struct gb_registers_s gb_reg;
 	struct count_s counter;
 
@@ -1011,11 +1026,63 @@ void __gb_write(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 	(gb->gb_error)(gb, GB_INVALID_WRITE, addr);
 }
 
-__attribute__((optimize("Os")))
-uint8_t __gb_execute_cb(struct gb_s *gb)
+#ifdef TARGET_SIMULATOR
+#define __space __attribute__((optimize("O0")))
+#else
+#define __space __attribute__((optimize("Os")))
+#endif
+
+__space
+static void __gb_write16(struct gb_s * restrict gb, u16 addr, u16 v)
+{
+    // TODO: optimize
+    __gb_write(gb, addr, v & 0xFF);
+    __gb_write(gb, addr + 1, v >> 8);
+}
+
+__space
+static uint16_t __gb_read16(struct gb_s * restrict gb, u16 addr)
+{
+    // TODO: optimize
+    u16 v = __gb_read(gb, addr);
+    v |= (u16)__gb_read(gb, addr + 1) << 8;
+    return v;
+}
+
+__space
+static uint8_t __gb_fetch8(struct gb_s * restrict gb)
+{
+    return __gb_read(gb, gb->cpu_reg.pc++);
+}
+
+__space
+static uint16_t __gb_fetch16(struct gb_s * restrict gb)
+{
+    u16 v = __gb_read16(gb, gb->cpu_reg.pc);
+    gb->cpu_reg.pc += 2;
+    return v;
+}
+
+__space
+static uint16_t __gb_pop16(struct gb_s * restrict gb)
+{
+    u16 v = __gb_read16(gb, gb->cpu_reg.sp);
+    gb->cpu_reg.sp += 2;
+    return v;
+}
+
+__space
+static void __gb_push16(struct gb_s * restrict gb, u16 v)
+{
+    gb->cpu_reg.sp -= 2;
+    __gb_write16(gb, gb->cpu_reg.sp, v);
+}
+
+__space
+static uint8_t __gb_execute_cb(struct gb_s *gb)
 {
 	uint8_t inst_cycles;
-	uint8_t cbop = __gb_read(gb, gb->cpu_reg.pc++);
+	uint8_t cbop = __gb_fetch8(gb);
 	uint8_t r = (cbop & 0x7);
 	uint8_t b = (cbop >> 3) & 0x7;
 	uint8_t d = (cbop >> 3) & 0x1;
@@ -1498,8 +1565,7 @@ void __gb_draw_line(struct gb_s *gb)
 }
 #endif
 
-__attribute__((always_inline))
-static void __gb_run_instruction(struct gb_s *gb, uint8_t opcode)
+static unsigned __gb_run_instruction(struct gb_s *gb, uint8_t opcode)
 {
     static const uint8_t op_cycles[0x100] =
 	{
@@ -3489,121 +3555,312 @@ static void __gb_run_instruction(struct gb_s *gb, uint8_t opcode)
     }
 
 exit:
-    return inst_cycles
+    return inst_cycles;
 }
 
-typedef uint8_t u8;
-typedef uint16_t u16;
+__space
+static bool __gb_get_op_flag(struct gb_s* restrict gb, uint8_t op8)
+{
+    op8 %= 4;
+    bool flag = (op8 <= 1) ? gb->cpu_reg.f_bits.z : gb->cpu_reg.f_bits.c;
+    flag ^= (op8 % 2);
+    return flag;
+}
 
-__attribute__((always_inline))
-__attribute__((optimize("Os")))
-static void __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opcode)
+static u16 __gb_add16(struct gb_s* restrict gb, u16 a, u16 b)
+{
+    unsigned temp = a + b;
+    gb->cpu_reg.f_bits.n = 0;
+    gb->cpu_reg.f_bits.h =
+            ((temp ^ a ^ b) >> 12) & 1;
+    gb->cpu_reg.f_bits.c = temp >> 16;
+    return temp;
+}
+
+__attribute__((noinline))
+static void __gb_invalid(struct gb_s* gb, u8 opcode)
+{
+    (gb->gb_error)(gb, GB_INVALID_OPCODE, opcode);
+    gb->gb_frame = 1;
+}
+
+__attribute__((noinline))
+static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode);
+
+__space
+static unsigned __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opcode)
 {
     const u8 op8 = ((opcode & ~ 0xC0) / 8) ^ 1;
-    u8 cycles = 4;
-    u8 src;
+    float cycles = 1; // use fpu register, save space
+    unsigned src;
+    u8 srcidx;
     switch(opcode >> 6)
     {
     case 0:
         {
             int reg8 = 2*(opcode/16) | (op8 & 1); // i.e. b, c, d, e, ...
-            if (reg8 >= 6 && (opcode % 8 < 4)) reg8 += 2; // hack for SP
             int reg16 = reg8/2; // i.e. bc, de, hl...
-            switch (opcode & 0xF)
+            if (reg16 == 3) reg16 = 4; // hack for SP
+            switch (opcode % 16)
             {
             case 0:
-                // MISC, JR
-                // TODO
+            case 8:
+                if (opcode == 0) break; // nop
+                if (opcode < 0x18) return __gb_rare_instruction(gb, opcode);
+                {
+                    // jr
+                    cycles = 2;
+                    bool flag = __gb_get_op_flag(gb, op8);
+                    if (opcode == 0x18) flag = 1;
+                    if (flag)
+                    {
+                        cycles = 3;
+                        gb->cpu_reg.pc += (s8)__gb_fetch8(gb);
+                    }
+                    else
+                    {
+                        gb->cpu_reg.pc++;
+                    }
+                }
                 break;
             case 1:
                 // LD r16, d16
-                // TODO
+                cycles = 3;
+                gb->cpu_reg_raw16[reg16] = __gb_fetch16(gb);
                 break;
             case 2:
-                // LD r16, a
+            case 10:
                 // TODO
+                cycles = 2;
+                if (reg16 == 4) reg16 = 2;
+                
+                if (op8 % 2 == 1)
+                {
+                    // ld (r16), a
+                    __gb_write(gb, gb->cpu_reg_raw16[reg16], gb->cpu_reg.a);
+                }
+                else
+                {
+                    // ld a, (r16)
+                    gb->cpu_reg.a = __gb_read(gb, gb->cpu_reg_raw16[reg16]);
+                }
                 
                 goto inc_dec_hl;
                 break;
             case 3:
-                // inc r16
-                // TODO
+            case 11:
+                {
+                    // inc r16
+                    // dec r16
+                    s16 offset = (op8 % 2 == 1)
+                        ? 1
+                        : -1;
+                    gb->cpu_reg_raw16[reg16] += offset;
+                    cycles = 2;
+                }
                 break;
                 
             case 4:
-            case 0xC:
-                // inc r8
-                // TODO
-                break;
-                
             case 5:
-            case 0xB:
-                // inc r8
-                // TODO
+            case 12:
+            case 13:
+                {
+                    // FIXME -- optimize?
+                    // inc r8
+                    // dec r8
+                    s8 offset = (opcode % 8 == 4)
+                        ? 1
+                        : -1;
+                    u8 src = (reg8 == 7)
+                        ? __gb_read(gb, gb->cpu_reg.hl)
+                        : gb->cpu_reg_raw[reg8];
+                    u8 tmp = src + offset;
+                    gb->cpu_reg.f_bits.z = tmp == 0;
+                    if (offset == 1)
+                    {
+                        gb->cpu_reg.f_bits.n = 0;
+                        gb->cpu_reg.f_bits.h = (tmp & 0xF) == 0;
+                    }
+                    else
+                    {
+                        gb->cpu_reg.f_bits.n = 1;
+                        gb->cpu_reg.f_bits.h = (tmp & 0xF) == 0xF;
+                    }
+                    if (reg8 == 7)
+                    {
+                        cycles = 3;
+                        __gb_write(gb, gb->cpu_reg.hl, tmp);
+                    }
+                    else
+                    {
+                        gb->cpu_reg_raw[reg8] = tmp;
+                    }
+                }
                 break;
                 
             case 6:
-            case 0xC:
-                // ld d8
-                // TODO
+            case 14:
+                srcidx = 0;
+                src = __gb_fetch8(gb);
+                cycles = 2;
+                goto ld_x_x;
                 break;
                 
             case 7:
-                // misc flags
-                // TODO
+            case 15:
+                // misc flag ops
+                if (opcode < 0x20)
+                {
+                    // rlca
+                    // rrca
+                    // rla
+                    // rra
+                    u32 v = gb->cpu_reg.a << 8;
+                    if (op8 & 2)
+                    {
+                        // carry bit will rotate into a
+                        u32 c = gb->cpu_reg.f_bits.c;
+                        v |= (c << 7) | (c << 16);
+                    }
+                    else
+                    {
+                        // opposite bit will rotate into a
+                        v = v | (v << 8);
+                        v = v | (v >> 8);
+                    }
+                    if (op8 & 1)
+                    {
+                        v <<= 1;
+                    }
+                    else
+                    {
+                        v >>= 1;
+                    }
+                    gb->cpu_reg.f = 0;
+                    gb->cpu_reg.f_bits.c = (v >> (7 + 9*(op8&1))) & 1;
+                    gb->cpu_reg.a = (v >> 8) & 0xFF;
+                }
+                else if unlikely(opcode == 0x27) return __gb_rare_instruction(gb, opcode);
+                else if (opcode == 0x2F) {
+                    gb->cpu_reg.a ^= 0xFF;
+                    gb->cpu_reg.f_bits.n = 1;
+                    gb->cpu_reg.f_bits.h = 1;
+                }
+                else if (op8 % 2 == 1)
+                {
+                    gb->cpu_reg.f_bits.c = 1;
+                    gb->cpu_reg.f_bits.n = 0;
+                    gb->cpu_reg.f_bits.h = 0;
+                }
+                else if (op8 % 2 == 0)
+                {
+                    gb->cpu_reg.f_bits.c ^= 1;
+                    gb->cpu_reg.f_bits.n = 0;
+                    gb->cpu_reg.f_bits.h = 0;
+                }
                 break;
+            
+            case 9:
+                // add hl, r16
+                cycles = 2;
+                gb->cpu_reg.hl = __gb_add16(gb, gb->cpu_reg.hl, gb->cpu_reg_raw16[reg16]);
+                break;
+
+            default: __builtin_unreachable();
             }
         }
         break;
     case 1:
     case 2:
         {
+            srcidx = (opcode % 8) ^ 1;
+            if (srcidx == 7)
             {
-                u8 srcidx = (opcode & 3) ^ 1;
-                if (srcidx == 7)
-                {
-                    src = __gb_read(gb, gb->cpu_reg.hl);
-                    cycles += 4;
-                }
-                else src = gb->cpu_reg_raw[srcidx];
+                src = __gb_read(gb, gb->cpu_reg.hl);
+                cycles = 2;
             }
+            else src = gb->cpu_reg_raw[srcidx];
         
             switch(opcode >> 6)
             {
             case 1:
                 // LD x, x
+            ld_x_x:
                 {
-                ld_x_x:
                     u8 dstidx = op8;
                     if (dstidx == 7)
                     {
                         if (srcidx == 7)
                         {
-                            /* HALT */
-                            gb->gb_halt = 1;
-                            return 4;
+                            return __gb_rare_instruction(gb, opcode);
                         }
                         else
                         {
-                            cycles += 4;
+                            cycles++;
                             __gb_write(gb, gb->cpu_reg.hl, src);
                         }
+                    }
+                    else
+                    {
+                        gb->cpu_reg_raw[dstidx] = src;
                     }
                 }
                 break;
             case 2:
-                // arithmetic
+            arithmetic:
                 switch (op8)
                 {
                 case 0: // ADC
                 case 1: // ADD
                 case 2: // SBC
                 case 3: // SUB
-                case 4: // XOR
-                case 5: // AND
                 case 6: // CP
+                    {
+                        // carry bit
+                        unsigned v = src;
+                        if (op8 % 2 == 0 && op8 != 6)
+                        {
+                            v += gb->cpu_reg.f_bits.c;
+                        }
+                        
+                        // subtraction
+                        gb->cpu_reg.f_bits.n = 0;
+                        if (op8 & 2)
+                        {
+                            v = -v;
+                            gb->cpu_reg.f_bits.n = 1;
+                        }
+                        
+                        // adder
+                        const u16 temp = gb->cpu_reg.a + v;
+                        gb->cpu_reg.f_bits.z = ((temp & 0xFF) == 0x00);
+                        gb->cpu_reg.f_bits.h =
+                            ((gb->cpu_reg.a ^ src ^ temp) >> 4) & 1;
+                        gb->cpu_reg.f_bits.c = temp >> 8;
+                        
+                        if (op8 != 6)
+                        {
+                            gb->cpu_reg.a = temp & 0xFF;
+                        }
+                    }
+                    break;
+                case 4: // XOR
+                    gb->cpu_reg.a ^= src;
+                    gb->cpu_reg.f = 0;
+                    gb->cpu_reg.f_bits.z = gb->cpu_reg.a == 0;
+                    break;
+                case 5: // AND
+                    gb->cpu_reg.a &= src;
+                    gb->cpu_reg.f = 0;
+                    gb->cpu_reg.f_bits.h = 1;
+                    gb->cpu_reg.f_bits.z = gb->cpu_reg.a == 0;
+                    break;
                 case 7: // OR
-                    // TODO
+                    gb->cpu_reg.a |= src;
+                    gb->cpu_reg.f = 0;
+                    gb->cpu_reg.f_bits.z = gb->cpu_reg.a == 0;
+                    break;
+                default: __builtin_unreachable();
                 }
                 break;
             }
@@ -3611,43 +3868,140 @@ static void __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opcode)
         break;
     case 3:
         {
-            const bool flag = (op8 <= 1) ? cpu_reg.f_bits.z : cpu_reg.f_bits.c;
-            flag ^= (op8 % 2);
-            if (opcode % 8 == 2) flag = 1;
-            switch((opcode % 16) | ((opcode & 0x40) >> 2))
+            bool flag = __gb_get_op_flag(gb, op8);
+            if (opcode % 8 == 3) flag = 1;
+            switch((opcode % 16) | ((opcode & 0x20) >> 1))
             {
             case 0x00: case 0x08: // ret [flag]
+                cycles = 2;
+                if (flag)
+                {
+                    goto ret;
+                }
+                break;
             case 0x01: case 0x11: // pop
-            case 0x02: // jp
-            case 0x03: case 0xA: // jp [flag]
+                cycles = 3;
+                src = __gb_pop16(gb);
+                if (op8/2 == 3)
+                {
+                    gb->cpu_reg.a = src >> 8;
+                    gb->cpu_reg.f = src & 0xF0;
+                }
+                else
+                {
+                    gb->cpu_reg_raw16[op8/2] = src;
+                }
+                break;
+            case 0x02: case 0xA: // jp [flag]
+                cycles = 3;
+                if (flag)
+                {
+                    goto jp;
+                }
+                gb->cpu_reg.pc += 2;
+                break;
+            case 0x03: // jp
+                if unlikely(opcode == 0xD3)
+                {
+                    return __gb_rare_instruction(gb, opcode);
+                }
+            jp:
+                cycles = 4;
+                gb->cpu_reg.pc = __gb_fetch16(gb);
+                break;
             case 0x04: case 0x0C: // call [flag]
-            case 0x05: // push
-            case 0x06: case 0x0E: case 0x16: case 0x1E: // arithmetic
+                cycles = 3;
+                if (flag)
+                {
+                    goto call;
+                }
+                gb->cpu_reg.pc += 2;
+                break;
+            case 0x05: case 0x15: // push
+                cycles = 4;
+                src = gb->cpu_reg_raw16[op8/2];
+                if (op8/2 == 3)
+                {
+                    src = (gb->cpu_reg.a << 8) | (gb->cpu_reg.f & 0xF0);
+                }
+                __gb_push16(gb, src);
+                break;
+            case 0x06: case 0x0E: case 0x16: case 0x1E: // arith d8
+                cycles = 2;
+                src = __gb_fetch8(gb);
+                goto arithmetic;
+                break;
             case 0x07: case 0x0F: case 0x17: case 0x1F: // rst
+                cycles = 4;
+                __gb_push16(gb, gb->cpu_reg.pc);
+                gb->cpu_reg.pc = 8*(op8^1);
+                break;
             case 0x09: // ret, reti
+                if unlikely(opcode == 0xD9)
+                {
+                    gb->gb_ime = 1;
+                }
+            ret:
+                cycles += 3;
+                gb->cpu_reg.pc = __gb_pop16(gb);
+                break;
             case 0x0B: // CB opcodes
+                return __gb_execute_cb(gb);
+                break;
             case 0x0D: // call
+                if unlikely(op8 & 2)
+                {
+                    return __gb_rare_instruction(gb, opcode);
+                }
+            call:
+                cycles = 6;
+                {
+                    u16 tmp = __gb_fetch16(gb);
+                    __gb_push16(gb, gb->cpu_reg.pc);
+                    gb->cpu_reg.pc = tmp;
+                }
+                break;
             case 0x10: // ld (a8)
             case 0x12: // ld (C)
             case 0x13: case 0x1B: // di/ei
             case 0x14: case 0x1C: case 0x1D: // illegal
+            case 0x18: // SP+8
+            case 0x19: // pc/sp hl
+                return __gb_rare_instruction(gb, opcode);
+                break;
+            case 0x1A: // ld (a16)
+                {
+                    cycles = 4;
+                    u16 v = __gb_fetch16(gb);
+                    if (op8 & 2)
+                    {
+                        gb->cpu_reg.a = __gb_read(gb, v);
+                    }
+                    else
+                    {
+                        __gb_write(gb, v, gb->cpu_reg.a);
+                    }
+                }
+            default: __builtin_unreachable();
             }
         }
         break;
+    default: __builtin_unreachable();
     }
     
-    return cycles;
-    
-inc_dec_hl:
-    gb->cpu_reg.hl += (op8 >= 4);
-    gb->cpu_reg.hl -= 2*(op8 >= 6);
-    return cycles;
+    if (false)
+    {
+    inc_dec_hl:
+        gb->cpu_reg.hl += (opcode >= 0x20);
+        gb->cpu_reg.hl -= 2*(opcode >= 0x30);
+    }
+    return cycles*4;
 }
 
 /**
  * Internal function used to step the CPU.
  */
-__attribute__((optimize("Os")))
+__space
 void __gb_step_cpu(struct gb_s *gb)
 {
 	/* Handle interrupts */
@@ -3695,12 +4049,100 @@ void __gb_step_cpu(struct gb_s *gb)
 	}
     
 	/* Obtain opcode */
-    uint8_t opcode = (gb->gb_halt ? 0x00 : __gb_read(gb, gb->cpu_reg.pc++));
+    uint8_t opcode = (gb->gb_halt ? 0x00 : __gb_fetch8(gb));
     
-    uint8_t inst_cycles = __gb_run_instruction_micro(gb, opcode);
+    #ifndef CPU_VALIDATE
+    uint8_t inst_cycles =
+        __gb_run_instruction(gb, opcode);
+        //__gb_run_instruction_micro(gb, opcode);
+    #else
+    // run once as each, verify
+    
+    static u8 _wram[2][WRAM_SIZE];
+    static u8 _vram[2][VRAM_SIZE];
+    static struct gb_s _gb[2];
+    
+    memcpy(_wram[0], gb->wram, WRAM_SIZE);
+    memcpy(_vram[0], gb->vram, VRAM_SIZE);
+    memcpy(&_gb[0], gb, sizeof(_gb));
+    
+    uint8_t inst_cycles =
+        __gb_run_instruction(gb, opcode);
+        
+    gb->cpu_reg.f_bits.unused = 0;
+        
+    memcpy(_wram[1], gb->wram, WRAM_SIZE);
+    memcpy(_vram[1], gb->vram, VRAM_SIZE);
+    memcpy(&_gb[1], gb, sizeof(struct gb_s));
+    
+    memcpy(gb->wram, _wram[0], WRAM_SIZE);
+    memcpy(gb->vram, _vram[0], VRAM_SIZE);
+    memcpy(gb, &_gb[0], sizeof(struct gb_s));
+    
+    uint8_t inst_cycles_m =
+        __gb_run_instruction_micro(gb, opcode);
+        
+    gb->cpu_reg.f_bits.unused = 0;
+        
+    if (
+        memcmp(gb->wram, _wram[1], WRAM_SIZE)
+    ) {
+        gb->gb_frame = 1;
+        playdate->system->error("difference in wram on opcode %x", opcode);
+    }
+    if (
+        memcmp(gb->vram, _vram[1], VRAM_SIZE)
+    ) {
+        gb->gb_frame = 1;
+        playdate->system->error("difference in vram on opcode %x", opcode);
+    }
+    
+    if (
+        memcmp(&gb->cpu_reg, &_gb[1].cpu_reg, sizeof(struct cpu_registers_s))
+    ) {
+        gb->gb_frame = 1;
+        playdate->system->error("difference in CPU regs on opcode %x", opcode);
+        if (gb->cpu_reg.af != _gb[1].cpu_reg.af)
+        {
+            playdate->system->error("AF, was %x, expected %x", gb->cpu_reg.af, _gb[1].cpu_reg.af);
+        }
+        if (gb->cpu_reg.bc != _gb[1].cpu_reg.bc)
+        {
+            playdate->system->error("BC, was %x, expected %x", gb->cpu_reg.bc, _gb[1].cpu_reg.bc);
+        }
+        if (gb->cpu_reg.de != _gb[1].cpu_reg.de)
+        {
+            playdate->system->error("DE, was %x, expected %x", gb->cpu_reg.de, _gb[1].cpu_reg.de);
+        }
+        if (gb->cpu_reg.hl != _gb[1].cpu_reg.hl)
+        {
+            playdate->system->error("HL, was %x, expected %x", gb->cpu_reg.hl, _gb[1].cpu_reg.hl);
+        }
+        if (gb->cpu_reg.sp != _gb[1].cpu_reg.sp)
+        {
+            playdate->system->error("SP, was %x, expected %x", gb->cpu_reg.sp, _gb[1].cpu_reg.sp);
+        }
+        if (gb->cpu_reg.pc != _gb[1].cpu_reg.pc)
+        {
+            playdate->system->error("PC, was %x, expected %x", gb->cpu_reg.pc, _gb[1].cpu_reg.pc);
+        }
+    }
+    else if (
+        memcmp(gb, &_gb[1], sizeof(struct gb_s))
+    ) {
+        gb->gb_frame = 1;
+        playdate->system->error("difference in gb struct on opcode %x", opcode);
+    }
+    
+    if (
+        inst_cycles != inst_cycles_m
+    ) {
+        gb->gb_frame = 1;
+        playdate->system->error("cycle difference on opcode %x (expected %d, was %d)", opcode, inst_cycles, inst_cycles_m);
+    }
+    #endif
     
     {
-    
         /* DIV register timing */
         gb->counter.div_count += inst_cycles;
         
@@ -3882,7 +4324,9 @@ void gb_run_frame(struct gb_s *gb)
 	gb->gb_frame = 0;
     
 	while(!gb->gb_frame)
+    {
 		__gb_step_cpu(gb);
+    }
 }
 
 /**
@@ -4120,6 +4564,100 @@ void gb_init_lcd(struct gb_s *gb)
 	gb->display.WY = 0;
     
 	return;
+}
+    
+__attribute__((noinline))
+static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
+{
+    switch (opcode)
+    {
+    case 0x08: // ld (a16), SP
+        __gb_write16(gb, __gb_fetch16(gb), gb->cpu_reg.sp);
+        return 5*4;
+    case 0x10: // stop
+        gb->gb_ime = 0;
+        gb->gb_halt = 1;
+        return 1*4;
+    case 0x27: // daa
+        {
+            uint16_t a = gb->cpu_reg.a;
+
+            if(gb->cpu_reg.f_bits.n)
+            {
+                if(gb->cpu_reg.f_bits.h)
+                    a = (a - 0x06) & 0xFF;
+
+                if(gb->cpu_reg.f_bits.c)
+                    a -= 0x60;
+            }
+            else
+            {
+                if(gb->cpu_reg.f_bits.h || (a & 0x0F) > 9)
+                    a += 0x06;
+
+                if(gb->cpu_reg.f_bits.c || a > 0x9F)
+                    a += 0x60;
+            }
+
+            if((a & 0x100) == 0x100)
+                gb->cpu_reg.f_bits.c = 1;
+
+            gb->cpu_reg.a = a;
+            gb->cpu_reg.f_bits.z = (gb->cpu_reg.a == 0);
+            gb->cpu_reg.f_bits.h = 0;
+        }
+        return 1*4;
+    case 0x76: // halt
+        {
+            gb->gb_halt = 1;
+        }
+        return 1*4;
+    case 0xE0:
+        __gb_write(
+            gb,
+            0xFF00 | __gb_read(gb, gb->cpu_reg.pc++),
+            gb->cpu_reg.a
+        );
+        return 3*4;
+    case 0xE2:
+        __gb_write(gb, 0xFF00 | gb->cpu_reg.c, gb->cpu_reg.a);
+        return 2*4;
+    case 0xE8: {
+            int16_t offset = (int8_t) __gb_read(gb, gb->cpu_reg.pc++);
+            gb->cpu_reg.f = 0;
+            gb->cpu_reg.sp = __gb_add16(gb, gb->cpu_reg.sp, offset);
+        }
+        return 4*4;
+    case 0xE9: 
+        gb->cpu_reg.pc = gb->cpu_reg.hl;
+        return 4;
+    case 0xF0:
+        gb->cpu_reg.a =
+            __gb_read(gb, 0xFF00 | __gb_read(gb, gb->cpu_reg.pc++));
+        return 3*4;
+    case 0xF2:
+        gb->cpu_reg.a = __gb_read(gb, 0xFF00 | gb->cpu_reg.c);
+        return 2*4;
+    case 0xF3:
+        gb->gb_ime = 0;
+        return 1*4;
+    case 0xF8: {
+            int16_t offset = (int8_t) __gb_read(gb, gb->cpu_reg.pc++);
+            gb->cpu_reg.f = 0;
+            gb->cpu_reg.hl = __gb_add16(gb, gb->cpu_reg.sp, offset);
+            return 3*4;
+        }
+        return 3*4;
+    case 0xF9:
+        gb->cpu_reg.pc = gb->cpu_reg.hl;
+        return 2*4;
+    case 0xFB:
+        gb->gb_ime = 1;
+        return 1*4;
+    default:
+        __gb_invalid(gb, opcode);
+        return 1*4; // ?
+    }
 }
     
 #endif
