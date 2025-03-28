@@ -34,8 +34,6 @@
 
 #ifdef TARGET_SIMULATOR
     #define CPU_VALIDATE 1
-#elif defined(__arm__)
-    #define TARGET_DEVICE 1
 #endif
 
 #include "version.all"	/* Version information */

@@ -16,7 +16,7 @@ PGB_GameScene *audioGameScene = NULL;
 
 typedef struct PGB_GameSceneContext {
     PGB_GameScene *scene;
-    struct gb_s gb;
+    struct gb_s* gb;
     uint8_t wram[WRAM_SIZE];
     uint8_t vram[VRAM_SIZE];
     uint8_t *rom;
@@ -87,6 +87,9 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
     #endif
     
     PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
+    static struct gb_s* gb = NULL;
+    if (gb == NULL) gb = dtcm_alloc(sizeof(struct gb_s));
+    context->gb = gb;
     context->scene = gameScene;
     context->rom = NULL;
     context->cart_ram = NULL;
@@ -99,16 +102,16 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
     {
         context->rom = rom;
         
-        enum gb_init_error_e gb_ret = gb_init(&context->gb, context->wram, context->vram, rom, gb_error, context);
+        enum gb_init_error_e gb_ret = gb_init(context->gb, context->wram, context->vram, rom, gb_error, context);
         
         if(gb_ret == GB_INIT_NO_ERROR)
         {
             char *save_filename = pgb_save_filename(rom_filename, false);
             gameScene->save_filename = save_filename;
             
-            read_cart_ram_file(save_filename, &context->cart_ram, gb_get_save_size(&context->gb));
+            read_cart_ram_file(save_filename, &context->cart_ram, gb_get_save_size(context->gb));
             
-            context->gb.gb_cart_ram = context->cart_ram;
+            context->gb->gb_cart_ram = context->cart_ram;
             
             if(gameScene->audioEnabled)
             {
@@ -117,14 +120,14 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
                 
                 audio_init();
                 
-                context->gb.direct.sound = 1;
+                context->gb->direct.sound = 1;
                 audioGameScene = gameScene;
             }
             
             // init lcd
-            gb_init_lcd(&context->gb);
+            gb_init_lcd(context->gb);
             
-            context->gb.direct.frame_skip = 1;
+            context->gb->direct.frame_skip = 1;
 
             // set game state to loaded
             gameScene->state = PGB_GameSceneStateLoaded;
@@ -328,7 +331,7 @@ static void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16
     {
         // write recovery .sav
         char *recovery_filename = pgb_save_filename(context->scene->rom_filename, true);
-        write_cart_ram_file(recovery_filename, &context->gb.gb_cart_ram, gb_get_save_size(gb));
+        write_cart_ram_file(recovery_filename, &context->gb->gb_cart_ram, gb_get_save_size(gb));
         
         pgb_free(recovery_filename);
         
@@ -429,15 +432,15 @@ static void PGB_GameScene_update(void *object)
         PDButtons current;
         playdate->system->getButtonState(&current, NULL, NULL);
         
-        context->gb.direct.joypad_bits.start = !(gameScene->selector.startPressed);
-        context->gb.direct.joypad_bits.select = !(gameScene->selector.selectPressed);
+        context->gb->direct.joypad_bits.start = !(gameScene->selector.startPressed);
+        context->gb->direct.joypad_bits.select = !(gameScene->selector.selectPressed);
            
-        context->gb.direct.joypad_bits.a = !(current & kButtonA);
-        context->gb.direct.joypad_bits.b = !(current & kButtonB);
-        context->gb.direct.joypad_bits.left = !(current & kButtonLeft);
-        context->gb.direct.joypad_bits.up = !(current & kButtonUp);
-        context->gb.direct.joypad_bits.right = !(current & kButtonRight);
-        context->gb.direct.joypad_bits.down = !(current & kButtonDown);
+        context->gb->direct.joypad_bits.a = !(current & kButtonA);
+        context->gb->direct.joypad_bits.b = !(current & kButtonB);
+        context->gb->direct.joypad_bits.left = !(current & kButtonLeft);
+        context->gb->direct.joypad_bits.up = !(current & kButtonUp);
+        context->gb->direct.joypad_bits.right = !(current & kButtonRight);
+        context->gb->direct.joypad_bits.down = !(current & kButtonDown);
         
         if(needsDisplay)
         {
@@ -448,14 +451,19 @@ static void PGB_GameScene_update(void *object)
         memset(gameScene->debug_updatedRows, 0, LCD_ROWS);
         #endif
         
+        #ifdef DTCM_ALLOC
+        gb_run_frame(context->gb);
+        #else
+        // copy gb to DTCM temporarily
         struct gb_s gb;
-        memcpy(&gb, &context->gb, sizeof(struct gb_s));
+        memcpy(&gb, context->gb, sizeof(struct gb_s));
         
         gb_run_frame(&gb);
         
-        memcpy(&context->gb, &gb, sizeof(struct gb_s));
+        memcpy(context->gb, &gb, sizeof(struct gb_s));
+        #endif
         
-        bool gb_draw = (!context->gb.direct.frame_skip || !context->gb.display.frame_skip_count || needsDisplay);
+        bool gb_draw = (!context->gb->direct.frame_skip || !context->gb->display.frame_skip_count || needsDisplay);
         
         gameScene->scene->preferredRefreshRate = gb_draw ? 60 : 0;
         gameScene->scene->refreshRateCompensation = gb_draw ? (1.0f / 60 - PGB_App->dt) : 0;
@@ -496,7 +504,7 @@ static void PGB_GameScene_update(void *object)
                 uint8_t *pixels;
                 uint8_t *old_pixels;
                 
-                if(context->gb.display.back_fb_enabled)
+                if(context->gb->display.back_fb_enabled)
                 {
                     pixels = gb_front_fb[y];
                     old_pixels = gb_back_fb[y];
@@ -567,7 +575,7 @@ static void PGB_GameScene_update(void *object)
         if(gameScene->rtc_timer >= 1)
         {
             gameScene->rtc_timer = gameScene->rtc_timer - 1;
-            gb_tick_rtc(&context->gb);
+            gb_tick_rtc(context->gb);
         }
 
         if(needsDisplay)
@@ -721,7 +729,7 @@ static void PGB_GameScene_saveGame(PGB_GameScene *gameScene)
         
         if(gameScene->save_filename)
         {
-            write_cart_ram_file(gameScene->save_filename, &context->gb.gb_cart_ram, gb_get_save_size(&context->gb));
+            write_cart_ram_file(gameScene->save_filename, &context->gb->gb_cart_ram, gb_get_save_size(context->gb));
         }
     }
 }
@@ -777,7 +785,7 @@ static void PGB_GameScene_free(void *object)
     
     PGB_GameScene_saveGame(gameScene);
         
-    gb_reset(&context->gb);
+    gb_reset(context->gb);
     
     pgb_free(gameScene->rom_filename);
     
