@@ -17,6 +17,9 @@
 
 static int update(void* userdata);
 
+// low address that's within stack region
+static void* stack_end = ;
+
 DllExport int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg)
 {
     if(event == kEventInit)

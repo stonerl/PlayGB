@@ -186,7 +186,7 @@ typedef int16_t s16;
 #ifdef TARGET_SIMULATOR
 #define __core __attribute__((optimize("O0")))
 #else
-#define __core __attribute__((optimize("Os")))
+#define __core __attribute__((optimize("Os"))) __attribute__((section(".text.itcm")))
 #endif
 
 struct cpu_registers_s
