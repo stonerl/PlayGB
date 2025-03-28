@@ -37,8 +37,11 @@ UINCDIR += peanut_gb
 UINCDIR += minigb_apu
 UINCDIR += lcd
 
-# List all user C define here, like -D_DEBUG=1
-UDEFS = -fPIC -DDTCM_ALLOC
+
+# Note: if there are unexplained crashes, try disabling these.
+# DTCM_ALLOC: allow allocating variables in DTCM at the low-address end of the region reserved for the stack.
+# ITCM_CORE (requires DTCM_ALLOC, and special link_map.ld): run core interpreter from ITCM.
+UDEFS = -DDTCM_ALLOC -DITCM_CORE
 
 # Define ASM defines here
 UADEFS = 

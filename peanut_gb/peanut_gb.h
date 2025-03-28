@@ -183,16 +183,24 @@ typedef int16_t s16;
 
 // relocatable and tightly-packed interpreter code
 #ifdef TARGET_SIMULATOR
-#define __core __attribute__((optimize("O0")))
+    #define __core __attribute__((optimize("O0")))
 #else
-#define __core __attribute__((optimize("Os"))) __attribute__((section(".text.itcm"))) __attribute((short_call))
+    #ifdef ITCM_CORE
+        #define __core __attribute__((optimize("Os"))) __attribute__((section(".itcm"))) __attribute__((short_call))
+    #else
+        #define __core __attribute__((optimize("Os"))) __attribute__((section(".text.itcm")))
+    #endif
 #endif
 
 // Any function which a __core fn can call MUST be marked as long_call (i.e. __shell) to ensure portability.
 #ifdef TARGET_SIMULATOR
-#define __shell
+    #define __shell
 #else
-#define __shell __attribute__((long_call)) __attribute((noinline))
+    #ifdef ITCM_CORE
+        #define __shell __attribute__((long_call)) __attribute((noinline))
+    #else
+        #define __shell __attribute((noinline))
+    #endif
 #endif
 
 struct cpu_registers_s
@@ -397,6 +405,7 @@ struct gb_s
 #		define LCD_TRANSFER	3
 		uint8_t lcd_mode	: 2;
 		uint8_t lcd_blank	: 1;
+        uint8_t lcd_master_enable : 1;
 	};
 
 	/* Cartridge information:
@@ -1352,7 +1361,7 @@ static int compare_sprites(const void *in1, const void *in2)
 }
 #endif
 
-__shell
+__core
 void __gb_draw_line(struct gb_s *gb)
 {
     uint8_t *pixels = gb->display.back_fb_enabled ? gb_back_fb[gb->gb_reg.LY] : gb_front_fb[gb->gb_reg.LY];
@@ -4376,7 +4385,7 @@ void __gb_step_cpu(struct gb_s *gb)
         {
             gb->lcd_mode = LCD_TRANSFER;
     #if ENABLE_LCD
-            if(!gb->lcd_blank && !(gb->direct.frame_skip && !gb->display.frame_skip_count))
+            if(gb->lcd_master_enable && !gb->lcd_blank && !(gb->direct.frame_skip && !gb->display.frame_skip_count))
                 __gb_draw_line(gb);
     #endif
         }
@@ -4627,10 +4636,17 @@ void gb_init_lcd(struct gb_s *gb)
         
 	gb->display.window_clear = 0;
 	gb->display.WY = 0;
+    gb->lcd_master_enable = 1;
     
 	return;
 }
-    
+
+#else
+
+void gb_init_lcd(struct gb_s *gb) {}
+
+#endif
+ 
 __shell
 static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
 {
@@ -4725,7 +4741,5 @@ static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
         return 1*4; // ?
     }
 }
-    
-#endif
 
 #endif //PEANUT_GB_H

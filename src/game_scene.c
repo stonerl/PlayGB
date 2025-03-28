@@ -43,6 +43,31 @@ static const char *selectButtonText = "select";
 static uint8_t PGB_bitmask[4][4][4];
 static bool PGB_GameScene_bitmask_done = false;
 
+#if ITCM_CORE
+static void* core_itcm_reloc = NULL;
+extern char __itcm_start[];
+extern char __itcm_end[];
+#define itcm_core_size ((uintptr_t)&__itcm_end - (uintptr_t)&__itcm_start)
+
+static void itcm_core_init(void)
+{
+    if (core_itcm_reloc != NULL) return;
+    
+    core_itcm_reloc = dtcm_alloc(itcm_core_size);
+    memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
+    playdate->system->logToConsole("itcm start: %x, end %x: run_frame: %x", &__itcm_start, &__itcm_end, &gb_run_frame);
+    playdate->system->logToConsole("core is 0x%X bytes, relocated at 0x%X", itcm_core_size, core_itcm_reloc);
+}
+
+#define ITCM_CORE_FN(fn) ((typeof(fn)*)((uintptr_t)(void*)&fn - (uintptr_t)&__itcm_start + core_itcm_reloc))
+
+#else
+
+static void itcm_core_init(void) {}
+#define ITCM_CORE_FN(fn) fn
+
+#endif
+
 PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
 {
     PGB_Scene *scene = PGB_Scene_new();
@@ -89,6 +114,7 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
     PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
     static struct gb_s* gb = NULL;
     if (gb == NULL) gb = dtcm_alloc(sizeof(struct gb_s));
+    itcm_core_init();
     context->gb = gb;
     context->scene = gameScene;
     context->rom = NULL;
@@ -452,7 +478,7 @@ static void PGB_GameScene_update(void *object)
         #endif
         
         #ifdef DTCM_ALLOC
-        gb_run_frame(context->gb);
+        ITCM_CORE_FN(gb_run_frame)(context->gb);
         #else
         // copy gb to DTCM temporarily
         struct gb_s gb;
@@ -709,6 +735,13 @@ static void PGB_GameScene_didSelectLibrary(void *userdata)
     PGB_present(libraryScene->scene);
 }
 
+static void PGB_GameScene_didToggleLCD(void *userdata)
+{
+    PGB_GameScene *gameScene = userdata;
+    
+    gameScene->context->gb->lcd_master_enable ^= 1;
+}
+
 static void PGB_GameScene_menu(void *object)
 {
     PGB_GameScene *gameScene = object;
@@ -718,6 +751,8 @@ static void PGB_GameScene_menu(void *object)
     if(gameScene->state == PGB_GameSceneStateLoaded)
     {
         playdate->system->addMenuItem("Save", PGB_GameScene_didSelectSave, gameScene);
+        
+        playdate->system->addCheckmarkMenuItem("LCD", 1, PGB_GameScene_didToggleLCD, gameScene);
     }
 }
 
