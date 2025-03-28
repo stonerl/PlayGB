@@ -181,10 +181,18 @@ typedef int16_t s16;
 
 #define PEANUT_GB_ARRAYSIZE(array)    (sizeof(array)/sizeof(array[0]))
 
+// relocatable and tightly-packed interpreter code
 #ifdef TARGET_SIMULATOR
 #define __core __attribute__((optimize("O0")))
 #else
-#define __core __attribute__((optimize("Os"))) __attribute__((section(".text.itcm")))
+#define __core __attribute__((optimize("Os"))) __attribute__((section(".text.itcm"))) __attribute((short_call))
+#endif
+
+// Any function which a __core fn can call MUST be marked as long_call (i.e. __shell) to ensure portability.
+#ifdef TARGET_SIMULATOR
+#define __shell
+#else
+#define __shell __attribute__((long_call)) __attribute((noinline))
 #endif
 
 struct cpu_registers_s
@@ -559,6 +567,7 @@ void gb_set_rtc(struct gb_s *gb, const struct tm * const time)
 /**
  * Internal function used to read bytes.
  */
+__shell
 uint8_t __gb_read_full(struct gb_s *gb, const uint_fast16_t addr)
 {
 	switch(addr >> 12)
@@ -738,6 +747,7 @@ uint8_t __gb_read_full(struct gb_s *gb, const uint_fast16_t addr)
 /**
  * Internal function used to write bytes.
  */
+__shell
 void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 {
 	switch(addr >> 12)
@@ -1054,6 +1064,7 @@ static uint8_t __gb_read(struct gb_s *gb, const uint16_t addr)
     return __gb_read_full(gb, addr);
 }
 
+__core
 static void __gb_write(struct gb_s *gb, const uint16_t addr, uint8_t v)
 {
     if likely(addr >= 0xC000 && addr < 0xE000)
@@ -1341,6 +1352,7 @@ static int compare_sprites(const void *in1, const void *in2)
 }
 #endif
 
+__shell
 void __gb_draw_line(struct gb_s *gb)
 {
     uint8_t *pixels = gb->display.back_fb_enabled ? gb_back_fb[gb->gb_reg.LY] : gb_front_fb[gb->gb_reg.LY];
@@ -1614,6 +1626,7 @@ void __gb_draw_line(struct gb_s *gb)
 }
 #endif
 
+__shell
 static unsigned __gb_run_instruction(struct gb_s *gb, uint8_t opcode)
 {
     static const uint8_t op_cycles[0x100] =
@@ -3627,7 +3640,7 @@ static u16 __gb_add16(struct gb_s* restrict gb, u16 a, u16 b)
     return temp;
 }
 
-__attribute__((noinline))
+__shell
 static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode);
 
 __core
@@ -4042,6 +4055,7 @@ static unsigned __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opc
     return cycles*4;
 }
 
+__shell
 static void __gb_interrupt(struct gb_s *gb)
 {
     gb->gb_halt = 0;
@@ -4369,6 +4383,7 @@ void __gb_step_cpu(struct gb_s *gb)
     }
 }
 
+__core
 void gb_run_frame(struct gb_s *gb)
 {
 	gb->gb_frame = 0;
@@ -4616,7 +4631,7 @@ void gb_init_lcd(struct gb_s *gb)
 	return;
 }
     
-__attribute__((noinline))
+__shell
 static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
 {
     switch (opcode)

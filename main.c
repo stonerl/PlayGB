@@ -49,7 +49,7 @@ static void dtcm_init(void* addr)
     #endif
 }
 
-static bool dtcm_verify()
+static bool dtcm_verify(void)
 {
 #ifdef DTCM_ALLOC
     if (dtcm_low_canary_addr)
