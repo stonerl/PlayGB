@@ -186,7 +186,7 @@ typedef int16_t s16;
 #ifdef TARGET_SIMULATOR
 #define __core __attribute__((optimize("O0")))
 #else
-#define __core __attribute__((optimize("Os"))) __attribute((section(".itcm")))
+#define __core __attribute__((optimize("Os")))
 #endif
 
 struct cpu_registers_s
@@ -1037,7 +1037,7 @@ void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr, const uint8_t va
 __core
 static uint8_t __gb_read(struct gb_s *gb, const uint16_t addr)
 {
-    /*if likely(addr < 0x4000)
+    if likely(addr < 0x4000)
     {
         return gb->gb_rom[addr];
     }
@@ -1052,17 +1052,17 @@ static uint8_t __gb_read(struct gb_s *gb, const uint16_t addr)
     if likely(addr >= 0xC000 && addr < 0xE000)
     {
         return gb->wram[addr % WRAM_SIZE];
-    }*/
+    }
     return __gb_read_full(gb, addr);
 }
 
 static void __gb_write(struct gb_s *gb, const uint16_t addr, uint8_t v)
 {
-    /*if likely(addr >= 0xC000 && addr < 0xE000)
+    if likely(addr >= 0xC000 && addr < 0xE000)
     {
         gb->wram[addr % WRAM_SIZE] = v;
         return;
-    }*/
+    }
     __gb_write_full(gb, addr, v);
 }
 
@@ -1101,12 +1101,12 @@ __core
 static uint16_t __gb_pop16(struct gb_s * restrict gb)
 {
     u16 v;
-    /*if likely(gb->cpu_reg.sp >= HRAM_ADDR && gb->cpu_reg.sp < 0xFFFE)
+    if likely(gb->cpu_reg.sp >= HRAM_ADDR && gb->cpu_reg.sp < 0xFFFE)
     {
         v = gb->hram[gb->cpu_reg.sp - IO_ADDR];
         v |= gb->hram[gb->cpu_reg.sp - IO_ADDR + 1] << 8;
     }
-    else*/
+    else
     {
         v = __gb_read16(gb, gb->cpu_reg.sp);
     }
@@ -1119,12 +1119,12 @@ static void __gb_push16(struct gb_s * restrict gb, u16 v)
 {
     gb->cpu_reg.sp -= 2;
     
-    /*if likely(gb->cpu_reg.sp >= HRAM_ADDR && gb->cpu_reg.sp < HRAM_ADDR + 0x7E)
+    if likely(gb->cpu_reg.sp >= HRAM_ADDR && gb->cpu_reg.sp < HRAM_ADDR + 0x7E)
     {
         gb->hram[gb->cpu_reg.sp - IO_ADDR] = v & 0xFF;
         gb->hram[gb->cpu_reg.sp - IO_ADDR + 1] = v >> 8;
         return;
-    };*/
+    };
     
     __gb_write16(gb, gb->cpu_reg.sp, v);
 }
