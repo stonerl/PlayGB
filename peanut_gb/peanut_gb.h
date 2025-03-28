@@ -34,6 +34,8 @@
 
 #ifdef TARGET_SIMULATOR
     #define CPU_VALIDATE 1
+#elif defined(__arm__)
+    #define TARGET_DEVICE 1
 #endif
 
 #include "version.all"	/* Version information */
@@ -180,6 +182,12 @@ typedef int16_t s16;
 #endif
 
 #define PEANUT_GB_ARRAYSIZE(array)    (sizeof(array)/sizeof(array[0]))
+
+#ifdef TARGET_SIMULATOR
+#define __core __attribute__((optimize("O0")))
+#else
+#define __core __attribute__((optimize("Os"))) __attribute((section(".itcm")))
+#endif
 
 struct cpu_registers_s
 {
@@ -373,7 +381,7 @@ struct gb_s
 	struct
 	{
 		uint8_t gb_halt	: 1;
-		uint8_t gb_ime		: 1;
+		uint8_t gb_ime	: 1;
 		uint8_t gb_bios_enable : 1;
 		uint8_t gb_frame	: 1; /* New frame drawn. */
 
@@ -553,7 +561,7 @@ void gb_set_rtc(struct gb_s *gb, const struct tm * const time)
 /**
  * Internal function used to read bytes.
  */
-uint8_t __gb_read(struct gb_s *gb, const uint_fast16_t addr)
+uint8_t __gb_read_full(struct gb_s *gb, const uint_fast16_t addr)
 {
 	switch(addr >> 12)
 	{
@@ -732,7 +740,7 @@ uint8_t __gb_read(struct gb_s *gb, const uint_fast16_t addr)
 /**
  * Internal function used to write bytes.
  */
-void __gb_write(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
+void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 {
 	switch(addr >> 12)
 	{
@@ -973,7 +981,7 @@ void __gb_write(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 			gb->gb_reg.DMA = (val % 0xF1);
 
 			for(uint8_t i = 0; i < OAM_SIZE; i++)
-				gb->oam[i] = __gb_read(gb, (gb->gb_reg.DMA << 8) + i);
+				gb->oam[i] = __gb_read_full(gb, (gb->gb_reg.DMA << 8) + i);
 
 			return;
 
@@ -1026,21 +1034,39 @@ void __gb_write(struct gb_s *gb, const uint_fast16_t addr, const uint8_t val)
 	(gb->gb_error)(gb, GB_INVALID_WRITE, addr);
 }
 
-#ifdef TARGET_SIMULATOR
-#define __space __attribute__((optimize("O0")))
-#else
-#define __space __attribute__((optimize("Os")))
-#endif
-
-__space
-static void __gb_write16(struct gb_s * restrict gb, u16 addr, u16 v)
+__core
+static uint8_t __gb_read(struct gb_s *gb, const uint16_t addr)
 {
-    // TODO: optimize
-    __gb_write(gb, addr, v & 0xFF);
-    __gb_write(gb, addr + 1, v >> 8);
+    /*if likely(addr < 0x4000)
+    {
+        return gb->gb_rom[addr];
+    }
+    if likely(addr < 0x8000)
+    {
+        // TODO: optimize
+        if(gb->mbc == 1 && gb->cart_mode_select)
+            return gb->gb_rom[addr + ((gb->selected_rom_bank & 0x1F) - 1) * ROM_BANK_SIZE];
+        else
+            return gb->gb_rom[addr + (gb->selected_rom_bank - 1) * ROM_BANK_SIZE];
+    }
+    if likely(addr >= 0xC000 && addr < 0xE000)
+    {
+        return gb->wram[addr % WRAM_SIZE];
+    }*/
+    return __gb_read_full(gb, addr);
 }
 
-__space
+static void __gb_write(struct gb_s *gb, const uint16_t addr, uint8_t v)
+{
+    /*if likely(addr >= 0xC000 && addr < 0xE000)
+    {
+        gb->wram[addr % WRAM_SIZE] = v;
+        return;
+    }*/
+    __gb_write_full(gb, addr, v);
+}
+
+__core
 static uint16_t __gb_read16(struct gb_s * restrict gb, u16 addr)
 {
     // TODO: optimize
@@ -1049,13 +1075,21 @@ static uint16_t __gb_read16(struct gb_s * restrict gb, u16 addr)
     return v;
 }
 
-__space
+__core
+static void __gb_write16(struct gb_s * restrict gb, u16 addr, u16 v)
+{
+    // TODO: optimize
+    __gb_write(gb, addr, v & 0xFF);
+    __gb_write(gb, addr + 1, v >> 8);
+}
+
+__core
 static uint8_t __gb_fetch8(struct gb_s * restrict gb)
 {
     return __gb_read(gb, gb->cpu_reg.pc++);
 }
 
-__space
+__core
 static uint16_t __gb_fetch16(struct gb_s * restrict gb)
 {
     u16 v = __gb_read16(gb, gb->cpu_reg.pc);
@@ -1063,22 +1097,39 @@ static uint16_t __gb_fetch16(struct gb_s * restrict gb)
     return v;
 }
 
-__space
+__core
 static uint16_t __gb_pop16(struct gb_s * restrict gb)
 {
-    u16 v = __gb_read16(gb, gb->cpu_reg.sp);
+    u16 v;
+    /*if likely(gb->cpu_reg.sp >= HRAM_ADDR && gb->cpu_reg.sp < 0xFFFE)
+    {
+        v = gb->hram[gb->cpu_reg.sp - IO_ADDR];
+        v |= gb->hram[gb->cpu_reg.sp - IO_ADDR + 1] << 8;
+    }
+    else*/
+    {
+        v = __gb_read16(gb, gb->cpu_reg.sp);
+    }
     gb->cpu_reg.sp += 2;
     return v;
 }
 
-__space
+__core
 static void __gb_push16(struct gb_s * restrict gb, u16 v)
 {
     gb->cpu_reg.sp -= 2;
+    
+    /*if likely(gb->cpu_reg.sp >= HRAM_ADDR && gb->cpu_reg.sp < HRAM_ADDR + 0x7E)
+    {
+        gb->hram[gb->cpu_reg.sp - IO_ADDR] = v & 0xFF;
+        gb->hram[gb->cpu_reg.sp - IO_ADDR + 1] = v >> 8;
+        return;
+    };*/
+    
     __gb_write16(gb, gb->cpu_reg.sp, v);
 }
 
-__space
+__core
 static uint8_t __gb_execute_cb(struct gb_s *gb)
 {
 	uint8_t inst_cycles;
@@ -3558,7 +3609,7 @@ exit:
     return inst_cycles;
 }
 
-__space
+__core
 static bool __gb_get_op_flag(struct gb_s* restrict gb, uint8_t op8)
 {
     op8 %= 4;
@@ -3567,6 +3618,7 @@ static bool __gb_get_op_flag(struct gb_s* restrict gb, uint8_t op8)
     return flag;
 }
 
+__core
 static u16 __gb_add16(struct gb_s* restrict gb, u16 a, u16 b)
 {
     unsigned temp = a + b;
@@ -3578,16 +3630,9 @@ static u16 __gb_add16(struct gb_s* restrict gb, u16 a, u16 b)
 }
 
 __attribute__((noinline))
-static void __gb_invalid(struct gb_s* gb, u8 opcode)
-{
-    (gb->gb_error)(gb, GB_INVALID_OPCODE, opcode);
-    gb->gb_frame = 1;
-}
-
-__attribute__((noinline))
 static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode);
 
-__space
+__core
 static unsigned __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opcode)
 {
     const u8 op8 = ((opcode & ~ 0xC0) / 8) ^ 1;
@@ -3982,6 +4027,7 @@ static unsigned __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opc
                         __gb_write(gb, v, gb->cpu_reg.a);
                     }
                 }
+                break;
             default: __builtin_unreachable();
             }
         }
@@ -3998,63 +4044,67 @@ static unsigned __gb_run_instruction_micro(struct gb_s* restrict gb, uint8_t opc
     return cycles*4;
 }
 
+static void __gb_interrupt(struct gb_s *gb)
+{
+    gb->gb_halt = 0;
+
+    if(gb->gb_ime)
+    {
+        /* Disable interrupts */
+        gb->gb_ime = 0;
+        
+        /* Push Program Counter */
+        __gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc >> 8);
+        __gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc & 0xFF);
+
+        /* Call interrupt handler if required. */
+        if(gb->gb_reg.IF & gb->gb_reg.IE & VBLANK_INTR)
+        {
+            gb->cpu_reg.pc = VBLANK_INTR_ADDR;
+            gb->gb_reg.IF ^= VBLANK_INTR;
+        }
+        else if(gb->gb_reg.IF & gb->gb_reg.IE & LCDC_INTR)
+        {
+            gb->cpu_reg.pc = LCDC_INTR_ADDR;
+            gb->gb_reg.IF ^= LCDC_INTR;
+        }
+        else if(gb->gb_reg.IF & gb->gb_reg.IE & TIMER_INTR)
+        {
+            gb->cpu_reg.pc = TIMER_INTR_ADDR;
+            gb->gb_reg.IF ^= TIMER_INTR;
+        }
+        else if(gb->gb_reg.IF & gb->gb_reg.IE & SERIAL_INTR)
+        {
+            gb->cpu_reg.pc = SERIAL_INTR_ADDR;
+            gb->gb_reg.IF ^= SERIAL_INTR;
+        }
+        else if(gb->gb_reg.IF & gb->gb_reg.IE & CONTROL_INTR)
+        {
+            gb->cpu_reg.pc = CONTROL_INTR_ADDR;
+            gb->gb_reg.IF ^= CONTROL_INTR;
+        }
+    }
+}
+
 /**
  * Internal function used to step the CPU.
  */
-__space
+__core
 void __gb_step_cpu(struct gb_s *gb)
 {
 	/* Handle interrupts */
-	if((gb->gb_ime || gb->gb_halt) &&
+	if unlikely((gb->gb_ime || gb->gb_halt) &&
 			(gb->gb_reg.IF & gb->gb_reg.IE & ANY_INTR))
 	{
-		gb->gb_halt = 0;
-
-		if(gb->gb_ime)
-		{
-			/* Disable interrupts */
-			gb->gb_ime = 0;
-            
-			/* Push Program Counter */
-			__gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc >> 8);
-			__gb_write(gb, --gb->cpu_reg.sp, gb->cpu_reg.pc & 0xFF);
-
-			/* Call interrupt handler if required. */
-			if(gb->gb_reg.IF & gb->gb_reg.IE & VBLANK_INTR)
-			{
-				gb->cpu_reg.pc = VBLANK_INTR_ADDR;
-				gb->gb_reg.IF ^= VBLANK_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & LCDC_INTR)
-			{
-				gb->cpu_reg.pc = LCDC_INTR_ADDR;
-				gb->gb_reg.IF ^= LCDC_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & TIMER_INTR)
-			{
-				gb->cpu_reg.pc = TIMER_INTR_ADDR;
-				gb->gb_reg.IF ^= TIMER_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & SERIAL_INTR)
-			{
-				gb->cpu_reg.pc = SERIAL_INTR_ADDR;
-				gb->gb_reg.IF ^= SERIAL_INTR;
-			}
-			else if(gb->gb_reg.IF & gb->gb_reg.IE & CONTROL_INTR)
-			{
-				gb->cpu_reg.pc = CONTROL_INTR_ADDR;
-				gb->gb_reg.IF ^= CONTROL_INTR;
-			}
-		}
+		__gb_interrupt(gb);
 	}
     
 	/* Obtain opcode */
     uint8_t opcode = (gb->gb_halt ? 0x00 : __gb_fetch8(gb));
     
     #ifndef CPU_VALIDATE
-    uint8_t inst_cycles =
-        __gb_run_instruction(gb, opcode);
-        //__gb_run_instruction_micro(gb, opcode);
+    uint8_t inst_cycles;
+    inst_cycles = __gb_run_instruction_micro(gb, opcode);
     #else
     // run once as each, verify
     
@@ -4152,6 +4202,7 @@ void __gb_step_cpu(struct gb_s *gb)
             gb->counter.div_count -= DIV_CYCLES;
         }
         
+        #if 0
         /* Check serial transmission. */
         if(gb->gb_reg.SC & SERIAL_SC_TX_START)
         {
@@ -4200,6 +4251,7 @@ void __gb_step_cpu(struct gb_s *gb)
                 gb->counter.serial_count = 0;
             }
         }
+        #endif
                 
         /* TIMA register timing */
         /* TODO: Change tac_enable to struct of TAC timer control bits. */
@@ -4649,13 +4701,14 @@ static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
         }
         return 3*4;
     case 0xF9:
-        gb->cpu_reg.pc = gb->cpu_reg.hl;
+        gb->cpu_reg.sp = gb->cpu_reg.hl;
         return 2*4;
     case 0xFB:
         gb->gb_ime = 1;
         return 1*4;
     default:
-        __gb_invalid(gb, opcode);
+        (gb->gb_error)(gb, GB_INVALID_OPCODE, opcode);
+        gb->gb_frame = 1;
         return 1*4; // ?
     }
 }
