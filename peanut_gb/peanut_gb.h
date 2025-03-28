@@ -148,6 +148,7 @@ typedef int16_t s16;
 #define LCD_MODE_3_CYCLES   284
 #define LCD_VERT_LINES      154
 #define LCD_WIDTH           160
+#define LCD_WIDTH_PACKED    (LCD_WIDTH/2)
 #define LCD_HEIGHT          144
 
 /* VRAM Locations */
@@ -321,8 +322,8 @@ struct gb_registers_s
 	* Bit mask for whether a pixel is OBJ0, OBJ1, or BG. Each may have a different
 	* palette when playing a DMG game on CGB.
 	*/
-	#define LCD_PALETTE_OBJ	0x10
-	#define LCD_PALETTE_BG	0x20
+	#define LCD_PALETTE_OBJ	0x4
+	#define LCD_PALETTE_BG	0x8
 	/**
 	* Bit mask for the two bits listed above.
 	* LCD_PALETTE_ALL == 0b00 --> OBJ0
@@ -365,8 +366,9 @@ enum gb_serial_rx_ret_e
 	GB_SERIAL_RX_NO_CONNECTION = 1
 };
 
-static uint8_t gb_front_fb[LCD_HEIGHT][LCD_WIDTH];
-static uint8_t gb_back_fb[LCD_HEIGHT][LCD_WIDTH];
+// TODO: try storing this directly in the playdate framebuffer for improved perf?
+uint8_t gb_front_fb[LCD_HEIGHT][LCD_WIDTH_PACKED];
+uint8_t gb_back_fb[LCD_HEIGHT][LCD_WIDTH_PACKED];
 
 /**
  * Emulator context.
@@ -1362,9 +1364,29 @@ static int compare_sprites(const void *in1, const void *in2)
 #endif
 
 __core
+static void __gb_draw_pixel(uint8_t* line, u8 x, u8 v)
+{
+    u8* pix = line + x/2;
+    x = (x % 2) * 4;
+    *pix &= ~(0xF << x);
+    *pix |= v << x;
+}
+
+__core
+static u8 __gb_get_pixel(uint8_t* line, u8 x)
+{
+    u8* pix = line + x/2;
+    x = (x % 2) * 4;
+    return (*pix >> x) & 0xF;
+}
+
+__core
 void __gb_draw_line(struct gb_s *gb)
 {
-    uint8_t *pixels = gb->display.back_fb_enabled ? gb_back_fb[gb->gb_reg.LY] : gb_front_fb[gb->gb_reg.LY];
+    uint8_t *pixels =
+        gb->display.back_fb_enabled
+            ? gb_back_fb[gb->gb_reg.LY]
+            : gb_front_fb[gb->gb_reg.LY];
     
     /* If background is enabled, draw it. */
 	if(gb->gb_reg.LCDC & LCDC_BG_ENABLE)
@@ -1432,7 +1454,7 @@ void __gb_draw_line(struct gb_s *gb)
 
 			/* copy background */
 			uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
-            pixels[disp_x] = (gb->display.bg_palette[c] | LCD_PALETTE_BG);
+            __gb_draw_pixel(pixels, disp_x, gb->display.bg_palette[c] | LCD_PALETTE_BG);
             
 			t1 >>= 1;
 			t2 >>= 1;
@@ -1495,7 +1517,7 @@ void __gb_draw_line(struct gb_s *gb)
 
 			// copy window
 			uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
-            pixels[disp_x] = (gb->display.bg_palette[c] | LCD_PALETTE_BG);
+            __gb_draw_pixel(pixels, disp_x, gb->display.bg_palette[c] | LCD_PALETTE_BG);
             
 			t1 >>= 1;
 			t2 >>= 1;
@@ -1622,9 +1644,9 @@ void __gb_draw_line(struct gb_s *gb)
 				uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
 				// check transparency / sprite overlap / background overlap
 
-				if(c && !((OF & OBJ_PRIORITY) && pixels[disp_x] & 0x3)){
+				if(c && !((OF & OBJ_PRIORITY) && __gb_get_pixel(pixels, disp_x) & 0x3)){
 					/* Set pixel colour. */
-                    pixels[disp_x] = ((gb->display.sp_palette[c + c_add] | (OF & OBJ_PALETTE)) & ~LCD_PALETTE_BG);
+                    __gb_draw_pixel(pixels, disp_x, (gb->display.sp_palette[c + c_add] | (c_add)) & ~LCD_PALETTE_BG);
 				}
 
                 t1 >>= 1;

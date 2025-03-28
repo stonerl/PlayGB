@@ -559,7 +559,7 @@ static void PGB_GameScene_update(void *object)
                     
                     for(int x = 0; x < LCD_WIDTH; x++)
                     {
-                        uint8_t pixel = pixels[x] & 3;
+                        uint8_t pixel = __gb_get_pixel(pixels, x) & 3;
                         
                         framebuffer[fb_index1] |= PGB_bitmask[pixel][bit][d_row1];
                         if(y_offset == 2)
