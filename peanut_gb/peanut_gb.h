@@ -58,7 +58,7 @@ typedef int16_t s16;
  * before including peanut_gb.h in order for these functions to be used.
  */
 #ifndef ENABLE_SOUND
-#	define ENABLE_SOUND 0
+#	define ENABLE_SOUND 1
 #endif
 
 /* Enable LCD drawing. On by default. May be turned off for testing purposes. */
@@ -4194,6 +4194,7 @@ void __gb_step_cpu(struct gb_s *gb)
     memcpy(_vram[0], gb->vram, VRAM_SIZE);
     memcpy(&_gb[0], gb, sizeof(_gb));
     
+    uint8_t opcode = (gb->gb_halt ? 0 : __gb_fetch8(gb));
     uint8_t inst_cycles =
         __gb_run_instruction(gb, opcode);
     
@@ -4208,7 +4209,7 @@ void __gb_step_cpu(struct gb_s *gb)
     memcpy(gb, &_gb[0], sizeof(struct gb_s));
     
     uint8_t inst_cycles_m =
-        __gb_run_instruction_micro(gb, opcode);
+        __gb_run_instruction_micro(gb);
         
     gb->cpu_reg.f_bits.unused = 0;
         
@@ -4644,7 +4645,7 @@ enum gb_init_error_e gb_init(struct gb_s *gb,
 
 	gb->lcd_blank = 0;
     
-    gb->direct.sound = 0;
+    gb->direct.sound = ENABLE_SOUND;
     
 	gb_reset(gb);
 
