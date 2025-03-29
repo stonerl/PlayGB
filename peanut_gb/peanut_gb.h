@@ -148,7 +148,9 @@ typedef int16_t s16;
 #define LCD_MODE_3_CYCLES   284
 #define LCD_VERT_LINES      154
 #define LCD_WIDTH           160
-#define LCD_WIDTH_PACKED    (LCD_WIDTH/2)
+#define LCD_PACKING         4 /* pixels per byte */
+#define LCD_BITS_PER_PIXEL (8/LCD_PACKING)
+#define LCD_WIDTH_PACKED    (LCD_WIDTH/LCD_PACKING)
 #define LCD_HEIGHT          144
 
 /* VRAM Locations */
@@ -1363,24 +1365,27 @@ static int compare_sprites(const void *in1, const void *in2)
 __core
 static void __gb_draw_pixel(uint8_t* line, u8 x, u8 v)
 {
-    u8* pix = line + x/2;
-    x = (x % 2) * 4;
-    *pix &= ~(0xF << x);
+    u8* pix = line + x/LCD_PACKING;
+    x = (x % LCD_PACKING) * (8 / LCD_PACKING);
+    *pix &= ~(((1 << LCD_BITS_PER_PIXEL)-1) << x);
     *pix |= v << x;
 }
 
 __core
 static u8 __gb_get_pixel(uint8_t* line, u8 x)
 {
-    u8* pix = line + x/2;
-    x = (x % 2) * 4;
-    return (*pix >> x) & 0xF;
+    u8* pix = line + x/LCD_PACKING;
+    x = (x % LCD_PACKING) * LCD_BITS_PER_PIXEL;
+    return (*pix >> x) % (1 << LCD_BITS_PER_PIXEL);
 }
 
+// renders one scanline
 __core
 void __gb_draw_line(struct gb_s *gb)
 {
     uint8_t *pixels = &gb->lcd[gb->gb_reg.LY*LCD_WIDTH_PACKED];
+    
+    __builtin_prefetch(pixels, 1);
     
     /* If background is enabled, draw it. */
 	if(gb->gb_reg.LCDC & LCDC_BG_ENABLE)
@@ -1448,7 +1453,7 @@ void __gb_draw_line(struct gb_s *gb)
 
 			/* copy background */
 			uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
-            __gb_draw_pixel(pixels, disp_x, gb->display.bg_palette[c] | LCD_PALETTE_BG);
+            __gb_draw_pixel(pixels, disp_x, gb->display.bg_palette[c] /*| LCD_PALETTE_BG*/);
             
 			t1 >>= 1;
 			t2 >>= 1;
@@ -1511,7 +1516,7 @@ void __gb_draw_line(struct gb_s *gb)
 
 			// copy window
 			uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
-            __gb_draw_pixel(pixels, disp_x, gb->display.bg_palette[c] | LCD_PALETTE_BG);
+            __gb_draw_pixel(pixels, disp_x, gb->display.bg_palette[c] /*| LCD_PALETTE_BG*/);
             
 			t1 >>= 1;
 			t2 >>= 1;
@@ -1638,9 +1643,9 @@ void __gb_draw_line(struct gb_s *gb)
 				uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
 				// check transparency / sprite overlap / background overlap
 
-				if(c && !((OF & OBJ_PRIORITY) && __gb_get_pixel(pixels, disp_x) & 0x3)){
+				if(c && !((OF & OBJ_PRIORITY) && __gb_get_pixel(pixels, disp_x))){
 					/* Set pixel colour. */
-                    __gb_draw_pixel(pixels, disp_x, (gb->display.sp_palette[c + c_add] | (c_add)) & ~LCD_PALETTE_BG);
+                    __gb_draw_pixel(pixels, disp_x, /*(*/ gb->display.sp_palette[c + c_add] /* | (c_add)) & ~LCD_PALETTE_BG*/);
 				}
 
                 t1 >>= 1;

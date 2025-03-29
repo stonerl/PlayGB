@@ -384,6 +384,7 @@ void update_fb(uint8_t* restrict framebuffer, uint8_t* restrict lcd, int interla
     unsigned fb_y = PGB_LCD_HEIGHT + PGB_LCD_Y;
     for (int y = LCD_HEIGHT; y --> 0;)
     {
+        // some scanlines are 2 px in thickness, some are 1.
         int row_height = 2;
         if (scale_index++ == 2)
         {
@@ -399,7 +400,7 @@ void update_fb(uint8_t* restrict framebuffer, uint8_t* restrict lcd, int interla
         
         for (int x = LCD_WIDTH; x --> 0;)
         {
-            unsigned pixel = __gb_get_pixel(line, x) & 3;
+            unsigned pixel = (line[x/4] >> (LCD_BITS_PER_PIXEL*(x%4))) % (1 << LCD_BITS_PER_PIXEL);
             unsigned c0 = (dither >> (2*pixel)) & 3;
             unsigned c1 = (dither >> (2*pixel+8)) & 3;
             u8* fbpix0 = fbline + (x/4);
