@@ -391,6 +391,9 @@ struct gb_s
 	/* Transmit one byte and return the received byte. */
 	void (*gb_serial_tx)(struct gb_s*, const uint8_t tx);
 	enum gb_serial_rx_ret_e (*gb_serial_rx)(struct gb_s*, uint8_t* rx);
+    
+    // shortcut to swappable bank (addr - 0x4000 offset built in)
+    uint8_t* selected_bank_addr;
 
 	struct
 	{
@@ -574,6 +577,18 @@ void gb_set_rtc(struct gb_s *gb, const struct tm * const time)
 	gb->cart_rtc[4] = time->tm_yday >> 8; /* High 1 bit of day counter. */
 }
 
+static void __gb_update_selected_bank_addr(struct gb_s *gb)
+{
+    int32_t offset;
+    if(gb->mbc == 1 && gb->cart_mode_select)
+        offset = (gb->selected_rom_bank & 0x1F) - 1;
+    else
+        offset = gb->selected_rom_bank - 1;
+    offset *= ROM_BANK_SIZE;
+    
+    gb->selected_bank_addr = gb->gb_rom + offset;
+}
+
 /**
  * Internal function used to read bytes.
  */
@@ -594,11 +609,7 @@ uint8_t __gb_read_full(struct gb_s *gb, const uint_fast16_t addr)
 	case 0x5:
 	case 0x6:
 	case 0x7:
-            if(gb->mbc == 1 && gb->cart_mode_select)
-                return gb->gb_rom[addr + ((gb->selected_rom_bank & 0x1F) - 1) * ROM_BANK_SIZE];
-            else
-                return gb->gb_rom[addr + (gb->selected_rom_bank - 1) * ROM_BANK_SIZE];
-            
+        return gb->selected_bank_addr[addr];
 
 	case 0x8:
 	case 0x9:
@@ -777,6 +788,7 @@ void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr, const uint8_t va
 			gb->selected_rom_bank = (gb->selected_rom_bank & 0x100) | val;
 			gb->selected_rom_bank =
 				gb->selected_rom_bank & gb->num_rom_banks_mask;
+            __gb_update_selected_bank_addr(gb);
 			return;
 		}
 
@@ -808,6 +820,7 @@ void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr, const uint8_t va
 		else if(gb->mbc == 5)
 			gb->selected_rom_bank = (val & 0x01) << 8 | (gb->selected_rom_bank & 0xFF);
 		gb->selected_rom_bank = gb->selected_rom_bank & gb->num_rom_banks_mask;
+        __gb_update_selected_bank_addr(gb);
 		return;
 
 	case 0x4:
@@ -817,6 +830,7 @@ void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr, const uint8_t va
 			gb->cart_ram_bank = (val & 3);
 			gb->selected_rom_bank = ((val & 3) << 5) | (gb->selected_rom_bank & 0x1F);
 			gb->selected_rom_bank = gb->selected_rom_bank & gb->num_rom_banks_mask;
+            __gb_update_selected_bank_addr(gb);
 		}
 		else if(gb->mbc == 3)
 			gb->cart_ram_bank = val;
@@ -1062,10 +1076,7 @@ static uint8_t __gb_read(struct gb_s *gb, const uint16_t addr)
     if likely(addr < 0x8000)
     {
         // TODO: optimize
-        if(gb->mbc == 1 && gb->cart_mode_select)
-            return gb->gb_rom[addr + ((gb->selected_rom_bank & 0x1F) - 1) * ROM_BANK_SIZE];
-        else
-            return gb->gb_rom[addr + (gb->selected_rom_bank - 1) * ROM_BANK_SIZE];
+        return gb->selected_bank_addr[addr];
     }
     if likely(addr >= 0xC000 && addr < 0xE000)
     {
@@ -1111,7 +1122,23 @@ static uint8_t __gb_fetch8(struct gb_s * restrict gb)
 __core
 static uint16_t __gb_fetch16(struct gb_s * restrict gb)
 {
-    u16 v = __gb_read16(gb, gb->cpu_reg.pc);
+    u16 v;
+    u16 addr = gb->cpu_reg.pc;
+    
+    if (addr < 0x3FFF)
+    {
+        v = gb->gb_rom[addr];
+        v |= gb->gb_rom[addr+1] << 8;
+    }
+    else if (addr >= 0x4000 && addr < 0x7FFF)
+    {
+        v = gb->selected_bank_addr[addr];
+        v |= gb->selected_bank_addr[addr+1] << 8;
+    }
+    else
+    {
+        v = __gb_read16(gb, addr);
+    }
     gb->cpu_reg.pc += 2;
     return v;
 }
@@ -4481,6 +4508,7 @@ void gb_reset(struct gb_s *gb)
 	gb->cart_ram_bank = 0;
 	gb->enable_cart_ram = 0;
 	gb->cart_mode_select = 0;
+    __gb_update_selected_bank_addr(gb);
 
 	/* Initialise CPU registers as though a DMG. */
 	gb->cpu_reg.af = 0x01B0;
