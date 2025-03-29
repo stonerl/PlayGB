@@ -52,4 +52,6 @@ void PGB_quit(void);
 // note, there is no associated free.
 void* dtcm_alloc(size_t size);
 
+#define PLAYDATE_ROW_STRIDE 52
+
 #endif /* app_h */

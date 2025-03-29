@@ -57,6 +57,7 @@ static void itcm_core_init(void)
     memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
     playdate->system->logToConsole("itcm start: %x, end %x: run_frame: %x", &__itcm_start, &__itcm_end, &gb_run_frame);
     playdate->system->logToConsole("core is 0x%X bytes, relocated at 0x%X", itcm_core_size, core_itcm_reloc);
+    playdate->system->clearICache();
 }
 
 #define ITCM_CORE_FN(fn) ((typeof(fn)*)((uintptr_t)(void*)&fn - (uintptr_t)&__itcm_start + core_itcm_reloc))
@@ -370,6 +371,45 @@ static void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16
     return;
 }
 
+__core
+void update_fb(uint8_t* framebuffer, uint8_t* lcd)
+{
+    framebuffer += (PGB_LCD_X/8);
+    const u32 dither = 0b00011111 | (0b00001011 << 8);
+    int scale_index = 0;
+    unsigned fb_y = PGB_LCD_HEIGHT + PGB_LCD_Y;
+    for (int y = LCD_HEIGHT; y --> 0;)
+    {
+        int row_height = 2;
+        if (scale_index++ == 2)
+        {
+            scale_index = 0;
+            row_height = 1;
+        }
+        
+        uint8_t* line = &lcd[y*LCD_WIDTH_PACKED];
+        fb_y -= row_height;
+        uint8_t* fbline = &framebuffer[fb_y*PLAYDATE_ROW_STRIDE];
+        for (int x = LCD_WIDTH; x --> 0;)
+        {
+            unsigned pixel = __gb_get_pixel(line, x) & 3;
+            unsigned c0 = (dither >> (2*pixel)) & 3;
+            unsigned c1 = (dither >> (2*pixel+8)) & 3;
+            u8* fbpix0 = fbline + (x/4);
+            u8* fbpix1 = fbline + (x/4) + PLAYDATE_ROW_STRIDE;
+            unsigned subpix = 6-2*(x%4);
+            *fbpix0 &= ~(0b11 << subpix);
+            *fbpix0 |= (c0 << subpix);
+            
+            if (row_height == 2)
+            {
+                *fbpix1 &= ~(0b11 << subpix);
+                *fbpix1 |= (c1 << subpix);
+            }
+        }
+    }
+}
+
 static void PGB_GameScene_update(void *object)
 {
     PGB_GameScene *gameScene = object;
@@ -496,7 +536,14 @@ static void PGB_GameScene_update(void *object)
         
         if(gb_draw)
         {
-            uint8_t *framebuffer = playdate->graphics->getFrame();
+            uint8_t* lcd = context->gb->display.back_fb_enabled
+                ? &gb_back_fb[0][0]
+                : &gb_front_fb[0][0];
+            ITCM_CORE_FN(update_fb)(playdate->graphics->getFrame(), lcd);
+            playdate->graphics->markUpdatedRows(0, PGB_LCD_HEIGHT);
+        }
+        # if 0
+            uint8_t *framebuffer = ;
             
             int skip_counter = 0;
             bool single_line = false;
@@ -595,6 +642,7 @@ static void PGB_GameScene_update(void *object)
                 }
             }
         }
+        #endif
         
         gameScene->rtc_timer += PGB_App->dt;
         
