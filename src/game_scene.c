@@ -392,27 +392,46 @@ void update_fb(uint8_t* restrict framebuffer, uint8_t* restrict lcd, int interla
             row_height = 1;
         }
         
-        uint8_t* line = &lcd[y*LCD_WIDTH_PACKED];
+        uint8_t* restrict line = &lcd[y*LCD_WIDTH_PACKED];
         fb_y -= row_height;
-        uint8_t* fbline = &framebuffer[fb_y*PLAYDATE_ROW_STRIDE];
+        uint8_t* restrict fbline = &framebuffer[fb_y*PLAYDATE_ROW_STRIDE];
         
         if (interlace++ % 2) continue;
         
-        for (int x = LCD_WIDTH; x --> 0;)
+        for (int x = LCD_WIDTH_PACKED; x --> 0;)
         {
-            unsigned pixel = (line[x/4] >> (LCD_BITS_PER_PIXEL*(x%4))) % (1 << LCD_BITS_PER_PIXEL);
-            unsigned c0 = (dither >> (2*pixel)) & 3;
-            unsigned c1 = (dither >> (2*pixel+8)) & 3;
-            u8* fbpix0 = fbline + (x/4);
-            u8* fbpix1 = fbline + (x/4) + PLAYDATE_ROW_STRIDE;
-            unsigned subpix = 6-2*(x%4);
-            *fbpix0 &= ~(0b11 << subpix);
-            *fbpix0 |= (c0 << subpix);
+            uint8_t orgpixels = line[x];
+            uint8_t pixels = orgpixels;
+            
+            // output pixel
+            unsigned p = 0;
+            
+            for (int i = 0; i < 4; ++i)
+            {
+                p <<= 2;
+                unsigned c0 = (dither >> (2*(pixels&3))) & 3;
+                p |= c0;
+                
+                pixels >>= 2;
+            }
+            
+            u8* restrict fbpix0 = fbline + x;
+            
+            *fbpix0 = p & 0xFF;
             
             if (row_height == 2)
             {
-                *fbpix1 &= ~(0b11 << subpix);
-                *fbpix1 |= (c1 << subpix);
+                pixels = orgpixels;
+                fbpix0 += PLAYDATE_ROW_STRIDE;
+                for (int i = 0; i < 4; ++i)
+                {
+                    p <<= 2;
+                    unsigned c1 = (dither >> (2*(pixels&3) + 8)) & 3;
+                    p |= c1;
+                    
+                    pixels >>= 2;
+                }
+                *fbpix0 = p & 0xFF;
             }
         }
         
