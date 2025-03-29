@@ -366,10 +366,6 @@ enum gb_serial_rx_ret_e
 	GB_SERIAL_RX_NO_CONNECTION = 1
 };
 
-// TODO: try storing this directly in the playdate framebuffer for improved perf?
-uint8_t gb_front_fb[LCD_HEIGHT][LCD_WIDTH_PACKED];
-uint8_t gb_back_fb[LCD_HEIGHT][LCD_WIDTH_PACKED];
-
 /**
  * Emulator context.
  *
@@ -453,7 +449,8 @@ struct gb_s
     uint8_t *vram; // vram[VRAM_SIZE];
 	uint8_t hram[HRAM_SIZE];
 	uint8_t oam[OAM_SIZE];
-
+    uint8_t *lcd;
+    
 	struct
 	{
 		/**
@@ -1383,10 +1380,7 @@ static u8 __gb_get_pixel(uint8_t* line, u8 x)
 __core
 void __gb_draw_line(struct gb_s *gb)
 {
-    uint8_t *pixels =
-        gb->display.back_fb_enabled
-            ? gb_back_fb[gb->gb_reg.LY]
-            : gb_front_fb[gb->gb_reg.LY];
+    uint8_t *pixels = &gb->lcd[gb->gb_reg.LY*LCD_WIDTH_PACKED];
     
     /* If background is enabled, draw it. */
 	if(gb->gb_reg.LCDC & LCDC_BG_ENABLE)
@@ -4535,6 +4529,7 @@ void gb_reset(struct gb_s *gb)
 enum gb_init_error_e gb_init(struct gb_s *gb,
                  uint8_t *wram,
                  uint8_t *vram,
+                 uint8_t* lcd,
 			     uint8_t *gb_rom,
 			     void (*gb_error)(struct gb_s*, const enum gb_error_e, const uint16_t),
 			     void *priv)
@@ -4570,6 +4565,7 @@ enum gb_init_error_e gb_init(struct gb_s *gb,
     
     gb->wram = wram;
     gb->vram = vram;
+    gb->lcd = lcd;
 	gb->gb_rom = gb_rom;
 	gb->gb_error = gb_error;
 	gb->direct.priv = priv;
@@ -4652,9 +4648,6 @@ void gb_init_lcd(struct gb_s *gb)
 	gb->display.frame_skip_count = 0;
     
     gb->display.back_fb_enabled = 0;
-    
-    memset(gb_front_fb, 0, sizeof(gb_front_fb));
-    memset(gb_back_fb, 0, sizeof(gb_back_fb));
         
 	gb->display.window_clear = 0;
 	gb->display.WY = 0;

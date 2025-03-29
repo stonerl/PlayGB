@@ -129,7 +129,9 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
     {
         context->rom = rom;
         
-        enum gb_init_error_e gb_ret = gb_init(context->gb, context->wram, context->vram, rom, gb_error, context);
+        static uint8_t lcd[LCD_HEIGHT * LCD_WIDTH_PACKED];
+        
+        enum gb_init_error_e gb_ret = gb_init(context->gb, context->wram, context->vram, lcd, rom, gb_error, context);
         
         if(gb_ret == GB_INIT_NO_ERROR)
         {
@@ -371,8 +373,10 @@ static void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16
     return;
 }
 
+typedef typeof(playdate->graphics->markUpdatedRows) markUpdateRows_t;
+
 __core
-void update_fb(uint8_t* framebuffer, uint8_t* lcd)
+void update_fb(uint8_t* restrict framebuffer, uint8_t* restrict lcd, int interlace, markUpdateRows_t markUpdateRows)
 {
     framebuffer += (PGB_LCD_X/8);
     const u32 dither = 0b00011111 | (0b00001011 << 8);
@@ -390,6 +394,9 @@ void update_fb(uint8_t* framebuffer, uint8_t* lcd)
         uint8_t* line = &lcd[y*LCD_WIDTH_PACKED];
         fb_y -= row_height;
         uint8_t* fbline = &framebuffer[fb_y*PLAYDATE_ROW_STRIDE];
+        
+        if (interlace++ % 2) continue;
+        
         for (int x = LCD_WIDTH; x --> 0;)
         {
             unsigned pixel = __gb_get_pixel(line, x) & 3;
@@ -407,6 +414,8 @@ void update_fb(uint8_t* framebuffer, uint8_t* lcd)
                 *fbpix1 |= (c1 << subpix);
             }
         }
+        
+        markUpdateRows(fb_y, fb_y + row_height - 1);
     }
 }
 
@@ -529,18 +538,24 @@ static void PGB_GameScene_update(void *object)
         memcpy(context->gb, &gb, sizeof(struct gb_s));
         #endif
         
-        bool gb_draw = (!context->gb->direct.frame_skip || !context->gb->display.frame_skip_count || needsDisplay);
+        bool gb_draw = context->gb->lcd_master_enable && (!context->gb->direct.frame_skip || !context->gb->display.frame_skip_count || needsDisplay);
         
         gameScene->scene->preferredRefreshRate = gb_draw ? 60 : 0;
         gameScene->scene->refreshRateCompensation = gb_draw ? (1.0f / 60 - PGB_App->dt) : 0;
         
         if(gb_draw)
         {
-            uint8_t* lcd = context->gb->display.back_fb_enabled
-                ? &gb_back_fb[0][0]
-                : &gb_front_fb[0][0];
-            ITCM_CORE_FN(update_fb)(playdate->graphics->getFrame(), lcd);
-            playdate->graphics->markUpdatedRows(0, PGB_LCD_HEIGHT);
+            uint8_t* lcd = context->gb->lcd;
+            static int interlace;
+            
+            interlace = !interlace;
+            
+            ITCM_CORE_FN(update_fb)(
+                playdate->graphics->getFrame(),
+                lcd,
+                interlace,
+                playdate->graphics->markUpdatedRows
+            );
         }
         # if 0
             uint8_t *framebuffer = ;
