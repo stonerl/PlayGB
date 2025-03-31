@@ -11,6 +11,7 @@
 
 #include "minigb_apu.h"
 #include "game_scene.h"
+#include "app.h"
 
 #define DMG_CLOCK_FREQ_U	((unsigned)DMG_CLOCK_FREQ)
 #define AUDIO_NSAMPLES		(AUDIO_SAMPLES * 2u)
@@ -28,7 +29,7 @@
  * FREQ_INC_REF must be equal to, or larger than AUDIO_SAMPLE_RATE in order
  * to avoid a division by zero error.
  * Using a square of 2 simplifies calculations. */
-#define FREQ_INC_REF		(AUDIO_SAMPLE_RATE * 16)
+#define FREQ_INC_REF		(AUDIO_SAMPLE_RATE * 1)
 
 #define MAX_CHAN_VOLUME		15
 
@@ -60,7 +61,7 @@ struct chan_freq_sweep {
 	uint32_t inc;
 };
 
-static struct chan {
+struct chan {
 	unsigned enabled : 1;
 	unsigned powered : 1;
 	unsigned on_left : 1;
@@ -94,9 +95,15 @@ static struct chan {
 			uint8_t sample;
 		} wave;
 	};
-} chans[4];
+};
+
+struct chan chans[4];
 
 static int32_t vol_l, vol_r;
+
+static const uint32_t lfsr_div_lut[] = {
+	8, 16, 32, 48, 64, 80, 96, 112
+};
 
 static void set_note_freq(struct chan *c, const uint32_t freq)
 {
@@ -196,7 +203,7 @@ static void update_square(int16_t *left, int16_t *right, const bool ch2, int len
 	set_note_freq(c, freq);
 	c->freq_inc *= 8;
     
-	for (uint_fast16_t i = 0; i < len; i++) {
+	for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION) {
 		update_len(c);
 
 		if (!c->enabled)
@@ -235,7 +242,7 @@ static uint8_t wave_sample(const unsigned int pos, const unsigned int volume)
 {
 	uint8_t sample;
 
-	sample =  audio_mem[(0xFF30 + pos / 2) - AUDIO_ADDR_COMPENSATION];
+	sample = audio_mem[(0xFF30 + pos / 2) - AUDIO_ADDR_COMPENSATION];
 	if (pos & 1) {
 		sample &= 0xF;
 	} else {
@@ -255,7 +262,7 @@ static void update_wave(int16_t *left, int16_t *right, int len)
     set_note_freq(c, freq);
 	c->freq_inc *= 32;
 
-	for (uint_fast16_t i = 0; i < len; i++) {
+	for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION) {
 		update_len(c);
 
 		if (!c->enabled)
@@ -302,31 +309,31 @@ static void update_noise(int16_t *left, int16_t *right, int len)
 
 	if (!c->powered)
 		return;
-
 	{
-		static const uint32_t lfsr_div_lut[] = {
-			8, 16, 32, 48, 64, 80, 96, 112
-		};
+		// TODO: precalculate
 		uint32_t freq;
-
-		freq = DMG_CLOCK_FREQ_U / (lfsr_div_lut[c->noise.lfsr_div] << c->freq);
+		freq = DMG_CLOCK_FREQ_U / (c->noise.lfsr_div << c->freq);
 		set_note_freq(c, freq);
+		
+		// This prevents a crash, unsure why.
+		if (c->freq_inc < 1000) return;
 	}
 
 	if (c->freq >= 14)
 		c->enabled = 0;
 
-	for (uint_fast16_t i = 0; i < len; i++) {
+	for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION) {
 		update_len(c);
 
-		if (!c->enabled)
-			continue;
+		if (!c->enabled || true)
 
 		update_env(c);
 
 		uint32_t pos      = 0;
 		uint32_t prev_pos = 0;
 		int32_t sample    = 0;
+		
+		continue;
 
 		while (update_freq(c, &pos)) {
 			c->noise.lfsr_reg = (c->noise.lfsr_reg << 1) |
@@ -535,7 +542,7 @@ void audio_write(const uint16_t addr, const uint8_t val)
 	case 0xFF22:
 		chans[3].freq = val >> 4;
 		chans[3].noise.lfsr_wide = !(val & 0x08);
-		chans[3].noise.lfsr_div = val & 0x07;
+		chans[3].noise.lfsr_div = lfsr_div_lut[val & 0x07];
 		break;
 
 	case 0xFF24:
@@ -557,7 +564,7 @@ void audio_write(const uint16_t addr, const uint8_t val)
 void audio_init(void)
 {
 	/* Initialise channels and samples. */
-	memset(chans, 0, sizeof(chans));
+	memset(chans, 0, 4 * sizeof(struct chan));
 	chans[0].val = chans[1].val = -1;
 
 	/* Initialise IO registers. */
@@ -605,14 +612,19 @@ int audio_callback(void *context, int16_t *left, int16_t *right, int len)
     struct chan *c3 = chans + 2;
     struct chan *c4 = chans + 3;
     
-    if(!c1->powered && !c2->powered && !c3->powered && !c4->powered){
-        return 0;
-    }
-    
     update_square(left, right, 0, len);
     update_square(left, right, 1, len);
     update_wave(left, right, len);
     update_noise(left, right, len);
+	
+	for (int i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION)
+	{
+		for (int j = i; j < i + AUDIO_SAMPLE_REPLICATION && j < len; ++j)
+		{
+			left[j] = left[i];
+			right[j] = right[i];
+		}
+	}
     
     return 1;
 }

@@ -142,12 +142,11 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
             
             context->gb->gb_cart_ram = context->cart_ram;
             
+            audio_init();
             if(gameScene->audioEnabled)
             {
                 // init audio
                 playdate->sound->channel->setVolume(playdate->sound->getDefaultChannel(), 0.2f);
-                
-                audio_init();
                 
                 context->gb->direct.sound = 1;
                 audioGameScene = gameScene;

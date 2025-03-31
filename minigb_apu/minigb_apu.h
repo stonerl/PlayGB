@@ -9,7 +9,11 @@
 
 #include <stdint.h>
 
-#define AUDIO_SAMPLE_RATE	44100
+// increasing AUDIO_SAMPLE_REPLICATION saves processing time,
+// but lowers audio quality. (duplicates, triplicates samples, etc.)
+// does not need to be a power of 2.
+#define AUDIO_SAMPLE_REPLICATION 5
+#define AUDIO_SAMPLE_RATE	(44100/AUDIO_SAMPLE_REPLICATION)
 
 #define DMG_CLOCK_FREQ		4194304.0
 #define SCREEN_REFRESH_CYCLES	70224.0
