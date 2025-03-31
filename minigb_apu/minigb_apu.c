@@ -140,15 +140,26 @@ static void update_env(struct chan *c)
 	}
 }
 
-static void update_len(struct chan *c)
+// returns sample index at which to stop outputting in channel
+static int update_len(struct chan *c, int len)
 {
-	if (!c->len.enabled)
-		return;
-
-	c->len.counter += c->len.inc;
-	if (c->len.counter > FREQ_INC_REF) {
-		chan_enable(c - chans, 0);
+	if (!c->enabled) return 0;
+	
+	if (!c->len.enabled || c->len.inc == 0)
+		return len;
+		
+	int tr = (FREQ_INC_REF - c->len.counter)/c->len.inc;
+	
+	if (tr > len)
+	{
 		c->len.counter = 0;
+		chan_enable(c - chans, 0);
+		return len;
+	}
+	else
+	{
+		c->len.counter -= len * c->len.inc;
+		return tr;
 	}
 }
 
@@ -202,12 +213,10 @@ static void update_square(int16_t *left, int16_t *right, const bool ch2, int len
     uint32_t freq = DMG_CLOCK_FREQ_U / ((2048 - c->freq) << 5);
 	set_note_freq(c, freq);
 	c->freq_inc *= 8;
+	
+	len = update_len(c, len);
     
 	for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION) {
-		update_len(c);
-
-		if (!c->enabled)
-			continue;
 
 		update_env(c);
 		if (!ch2)
@@ -262,11 +271,9 @@ static void update_wave(int16_t *left, int16_t *right, int len)
     set_note_freq(c, freq);
 	c->freq_inc *= 32;
 
+	len = update_len(c, len);
+    
 	for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION) {
-		update_len(c);
-
-		if (!c->enabled)
-			continue;
 
 		uint32_t pos      = 0;
 		uint32_t prev_pos = 0;
@@ -321,11 +328,10 @@ static void update_noise(int16_t *left, int16_t *right, int len)
 
 	if (c->freq >= 14)
 		c->enabled = 0;
-
+		
+	len = update_len(c, len);
+    
 	for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION) {
-		update_len(c);
-
-		if (!c->enabled || true)
 
 		update_env(c);
 
