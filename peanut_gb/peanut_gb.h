@@ -276,6 +276,8 @@ struct count_s
 struct gb_registers_s
 {
 	/* TODO: Sort variables in address order. */
+    uint16_t tac_cycles;
+    
 	/* Timing */
 	uint8_t TIMA, TMA, DIV;
 	union
@@ -575,6 +577,12 @@ void gb_set_rtc(struct gb_s *gb, const struct tm * const time)
 	gb->cart_rtc[2] = time->tm_hour;
 	gb->cart_rtc[3] = time->tm_yday & 0xFF; /* Low 8 bits of day counter. */
 	gb->cart_rtc[4] = time->tm_yday >> 8; /* High 1 bit of day counter. */
+}
+
+static void __gb_update_tac(struct gb_s *gb)
+{
+    static const uint_fast16_t TAC_CYCLES[4] = {1024, 16, 64, 256};
+    gb->gb_reg.tac_cycles = TAC_CYCLES[gb->gb_reg.tac_rate];
 }
 
 static void __gb_update_selected_bank_addr(struct gb_s *gb)
@@ -955,6 +963,7 @@ void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr, const uint8_t va
 
 		case 0x07:
 			gb->gb_reg.TAC = val;
+            __gb_update_tac(gb);
 			return;
 
 		/* Interrupt Flag Register */
@@ -4161,12 +4170,45 @@ static void __gb_interrupt(struct gb_s *gb)
     }
 }
 
+__shell
+static uint16_t __gb_calc_halt_cycles(struct gb_s* gb)
+{
+    int src[] = {512, 512, 512};
+    src[0] = (DIV_CYCLES - (int)gb->counter.div_count);
+    
+    if(gb->gb_reg.tac_enable)
+    {
+        src[1] = gb->gb_reg.tac_cycles - gb->counter.tima_count;
+    }
+    
+    src[2] = LCD_LINE_CYCLES - gb->counter.lcd_count;
+    if (gb->lcd_mode == LCD_HBLANK)
+    {
+        src[2] = LCD_MODE_2_CYCLES - gb->counter.lcd_count;
+    }
+    else if(gb->lcd_mode == LCD_SEARCH_OAM)
+    {
+        src[2] = LCD_MODE_3_CYCLES - gb->counter.lcd_count;
+    }
+    
+    // return max{16, min(src...)}
+    int m = src[0];
+    if (src[1] < m) m = src[1];
+    if (src[2] < m) m = src[2];
+        
+    return (m < 16)
+        ? 16
+        : m;
+}
+
 /**
  * Internal function used to step the CPU.
  */
 __core
 void __gb_step_cpu(struct gb_s *gb)
 {
+    uint16_t inst_cycles = 16;
+    
 	/* Handle interrupts */
 	if unlikely((gb->gb_ime || gb->gb_halt) &&
 			(gb->gb_reg.IF & gb->gb_reg.IE & ANY_INTR))
@@ -4174,15 +4216,15 @@ void __gb_step_cpu(struct gb_s *gb)
 		__gb_interrupt(gb);
 	}
     
-    bool micro_safe = (gb->cpu_reg.pc < 0x3FFE) || (gb->cpu_reg.pc >= 0x4000 && gb->cpu_reg.pc < 0x7FFE);
+    if unlikely(gb->gb_halt)
+    {
+        inst_cycles = __gb_calc_halt_cycles(gb);
+        goto done_instr;
+    }
     
     #ifndef CPU_VALIDATE
-    uint8_t inst_cycles = 16;
-    
-    if (!gb->gb_halt)
-    {
-        inst_cycles = __gb_run_instruction_micro(gb);
-    }
+
+    inst_cycles = __gb_run_instruction_micro(gb);
     #else
     // run once as each, verify
     
@@ -4195,7 +4237,7 @@ void __gb_step_cpu(struct gb_s *gb)
     memcpy(&_gb[0], gb, sizeof(_gb));
     
     uint8_t opcode = (gb->gb_halt ? 0 : __gb_fetch8(gb));
-    uint8_t inst_cycles =
+    inst_cycles =
         __gb_run_instruction(gb, opcode);
     
     gb->cpu_reg.f_bits.unused = 0;
@@ -4271,6 +4313,7 @@ void __gb_step_cpu(struct gb_s *gb)
     }
     #endif
     
+done_instr:
     {
         /* DIV register timing */
         gb->counter.div_count += inst_cycles;
@@ -4336,15 +4379,11 @@ void __gb_step_cpu(struct gb_s *gb)
         /* TODO: Change tac_enable to struct of TAC timer control bits. */
         if(gb->gb_reg.tac_enable)
         {
-            static const uint_fast16_t TAC_CYCLES[4] = {1024, 16, 64, 256};
-            
             gb->counter.tima_count += inst_cycles;
             
-            uint_fast16_t tac_cycle = TAC_CYCLES[gb->gb_reg.tac_rate];
-            
-            while(gb->counter.tima_count >= tac_cycle)
+            while(gb->counter.tima_count >= gb->gb_reg.tac_cycles)
             {
-                gb->counter.tima_count -= tac_cycle;
+                gb->counter.tima_count -= gb->gb_reg.tac_cycles;
                 
                 if(++gb->gb_reg.TIMA == 0)
                 {
@@ -4538,6 +4577,8 @@ void gb_reset(struct gb_s *gb)
 	gb->gb_reg.TMA       = 0x00;
 	gb->gb_reg.TAC       = 0xF8;
 	gb->gb_reg.DIV       = 0xAC;
+    
+    __gb_update_tac(gb);
 
 	gb->gb_reg.IF        = 0xE1;
 

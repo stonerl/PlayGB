@@ -16,7 +16,7 @@
 #define DMG_CLOCK_FREQ_U	((unsigned)DMG_CLOCK_FREQ)
 #define AUDIO_NSAMPLES		(AUDIO_SAMPLES * 2u)
 
-#define AUDIO_MEM_SIZE		(0xFF3F - 0xFF10 + 1)
+#define AUDIO_MEM_SIZE		(0xFF40 - 0xFF10)
 #define AUDIO_ADDR_COMPENSATION	0xFF10
 
 #define MAX(a, b)		( a > b ? a : b )
@@ -36,7 +36,7 @@
 /**
  * Memory holding audio registers between 0xFF10 and 0xFF3F inclusive.
  */
-static uint8_t audio_mem[AUDIO_MEM_SIZE];
+static uint8_t* audio_mem = NULL;
 
 struct chan_len_ctr {
 	uint8_t load;
@@ -567,8 +567,10 @@ void audio_write(const uint16_t addr, const uint8_t val)
 	}
 }
 
-void audio_init(void)
+void audio_init(uint8_t* _audio_mem)
 {
+	audio_mem = _audio_mem;
+	
 	/* Initialise channels and samples. */
 	memset(chans, 0, 4 * sizeof(struct chan));
 	chans[0].val = chans[1].val = -1;

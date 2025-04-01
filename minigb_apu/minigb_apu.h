@@ -34,7 +34,7 @@ void audio_write(const uint16_t addr, const uint8_t val);
 /**
  * Initialise audio driver.
  */
-void audio_init(void);
+void audio_init(uint8_t* audio_mem);
 
 /**
  * Playdate audio callback function.
