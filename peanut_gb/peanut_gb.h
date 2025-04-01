@@ -277,6 +277,7 @@ struct gb_registers_s
 {
 	/* TODO: Sort variables in address order. */
     uint16_t tac_cycles;
+    uint8_t tac_cycles_shift;
     
 	/* Timing */
 	uint8_t TIMA, TMA, DIV;
@@ -581,8 +582,11 @@ void gb_set_rtc(struct gb_s *gb, const struct tm * const time)
 
 static void __gb_update_tac(struct gb_s *gb)
 {
-    static const uint_fast16_t TAC_CYCLES[4] = {1024, 16, 64, 256};
-    gb->gb_reg.tac_cycles = TAC_CYCLES[gb->gb_reg.tac_rate];
+    static const uint8_t TAC_CYCLES[4] = {10, 4, 6, 8};
+    
+    // subtract 1 so it can be used as a mask for quick modulo.
+    gb->gb_reg.tac_cycles_shift = TAC_CYCLES[gb->gb_reg.tac_rate];
+    gb->gb_reg.tac_cycles = (1 << (int)TAC_CYCLES[gb->gb_reg.tac_rate]) - 1;
 }
 
 static void __gb_update_selected_bank_addr(struct gb_s *gb)
@@ -4174,11 +4178,15 @@ __shell
 static uint16_t __gb_calc_halt_cycles(struct gb_s* gb)
 {
     int src[] = {512, 512, 512};
-    src[0] = (DIV_CYCLES - (int)gb->counter.div_count);
+    
+    #if 0
+    // TODO: optimize serial 
+    if(gb->gb_reg.SC & SERIAL_SC_TX_START) return 16;
+    #endif
     
     if(gb->gb_reg.tac_enable)
     {
-        src[1] = gb->gb_reg.tac_cycles - gb->counter.tima_count;
+        src[1] = gb->gb_reg.tac_cycles + 1 - gb->counter.tima_count + ((0x100 - gb->gb_reg.TIMA) << gb->gb_reg.tac_cycles_shift);
     }
     
     src[2] = LCD_LINE_CYCLES - gb->counter.lcd_count;
@@ -4192,13 +4200,27 @@ static uint16_t __gb_calc_halt_cycles(struct gb_s* gb)
     }
     
     // return max{16, min(src...)}
-    int m = src[0];
-    if (src[1] < m) m = src[1];
-    if (src[2] < m) m = src[2];
-        
-    return (m < 16)
+    int cycles = src[0];
+    if (src[1] < cycles) cycles = src[1];
+    if (src[2] < cycles) cycles = src[2];
+       
+    // ensure positive 
+    cycles = (cycles < 16)
         ? 16
-        : m;
+        : cycles;
+    
+    return cycles;
+}
+
+__core
+static unsigned __gb_tima_overflow(struct gb_s* gb, unsigned tima)
+{
+    gb->gb_reg.IF |= TIMER_INTR;
+    tima -= 0x100;
+    unsigned div = 0x100 - (unsigned)gb->gb_reg.TMA;
+    tima %= div;
+    tima += (unsigned)gb->gb_reg.TMA;
+    return tima;
 }
 
 /**
@@ -4207,7 +4229,7 @@ static uint16_t __gb_calc_halt_cycles(struct gb_s* gb)
 __core
 void __gb_step_cpu(struct gb_s *gb)
 {
-    uint16_t inst_cycles = 16;
+    unsigned inst_cycles = 16;
     
 	/* Handle interrupts */
 	if unlikely((gb->gb_ime || gb->gb_halt) &&
@@ -4315,15 +4337,6 @@ void __gb_step_cpu(struct gb_s *gb)
     
 done_instr:
     {
-        /* DIV register timing */
-        gb->counter.div_count += inst_cycles;
-        
-        if(gb->counter.div_count >= DIV_CYCLES)
-        {
-            gb->gb_reg.DIV++;
-            gb->counter.div_count -= DIV_CYCLES;
-        }
-        
         #if 0
         /* Check serial transmission. */
         if(gb->gb_reg.SC & SERIAL_SC_TX_START)
@@ -4380,19 +4393,20 @@ done_instr:
         if(gb->gb_reg.tac_enable)
         {
             gb->counter.tima_count += inst_cycles;
-            
-            while(gb->counter.tima_count >= gb->gb_reg.tac_cycles)
+            unsigned tima = (unsigned)gb->gb_reg.TIMA + (gb->counter.tima_count >> gb->gb_reg.tac_cycles_shift);
+            gb->counter.tima_count &= gb->gb_reg.tac_cycles;
+            if (tima >= 0x100)
             {
-                gb->counter.tima_count -= gb->gb_reg.tac_cycles;
-                
-                if(++gb->gb_reg.TIMA == 0)
-                {
-                    gb->gb_reg.IF |= TIMER_INTR;
-                    /* On overflow, set TMA to TIMA. */
-                    gb->gb_reg.TIMA = gb->gb_reg.TMA;
-                }
+                tima = __gb_tima_overflow(gb, tima);
             }
+            gb->gb_reg.TIMA = tima;
         }
+    
+        /* DIV register timing */
+        // update DIV timer
+        gb->counter.div_count += inst_cycles;
+        gb->gb_reg.DIV += gb->counter.div_count / DIV_CYCLES;
+        gb->counter.div_count %= DIV_CYCLES;
         
         /* TODO Check behaviour of LCD during LCD power off state. */
         /* If LCD is off, don't update LCD state. */
@@ -4757,6 +4771,7 @@ static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
     case 0x10: // stop
         gb->gb_ime = 0;
         gb->gb_halt = 1;
+        playdate->system->logToConsole("'stop' instr");
         return 1*4;
     case 0x27: // daa
         {
