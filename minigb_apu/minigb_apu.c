@@ -33,6 +33,16 @@
 
 #define MAX_CHAN_VOLUME		15
 
+#ifdef TARGET_SIMULATOR
+    #define __audio __attribute__((optimize("O0")))
+#else
+	#define __audio __attribute__((optimize("Os"))) __attribute__((section(".text.audio"))) __attribute__((short_call))
+#endif
+
+// FIXME why does this give +2 fps? We aren't even running it from TCM
+#undef __audio
+#define __audio __core
+
 /**
  * Memory holding audio registers between 0xFF10 and 0xFF3F inclusive.
  */
@@ -105,6 +115,7 @@ static const uint32_t lfsr_div_lut[] = {
 	8, 16, 32, 48, 64, 80, 96, 112
 };
 
+__audio
 static void set_note_freq(struct chan *c, const uint32_t freq)
 {
 	/* Lowest expected value of freq is 64. */
@@ -124,6 +135,7 @@ static void chan_enable(const uint_fast8_t i, const bool enable)
 	//audio_mem[0xFF26 - AUDIO_ADDR_COMPENSATION] |= 0x80 | ((uint8_t)enable) << i;
 }
 
+__audio
 static void update_env(struct chan *c)
 {
 	c->env.counter += c->env.inc;
@@ -141,6 +153,7 @@ static void update_env(struct chan *c)
 }
 
 // returns sample index at which to stop outputting in channel
+__audio
 static int update_len(struct chan *c, int len)
 {
 	if (!c->enabled) return 0;
@@ -163,6 +176,7 @@ static int update_len(struct chan *c, int len)
 	}
 }
 
+__audio
 static bool update_freq(struct chan *c, uint32_t *pos)
 {
 	uint32_t inc = c->freq_inc - *pos;
@@ -178,6 +192,7 @@ static bool update_freq(struct chan *c, uint32_t *pos)
 	}
 }
 
+__audio
 static void update_sweep(struct chan *c)
 {
 	c->sweep.counter += c->sweep.inc;
@@ -203,6 +218,7 @@ static void update_sweep(struct chan *c)
 	}
 }
 
+__audio
 static void update_square(int16_t *left, int16_t *right, const bool ch2, int len)
 {
 	struct chan* c = chans + ch2;
@@ -247,6 +263,7 @@ static void update_square(int16_t *left, int16_t *right, const bool ch2, int len
 	}
 }
 
+__audio
 static uint8_t wave_sample(const unsigned int pos, const unsigned int volume)
 {
 	uint8_t sample;
@@ -260,6 +277,7 @@ static uint8_t wave_sample(const unsigned int pos, const unsigned int volume)
 	return volume ? (sample >> (volume - 1)) : 0;
 }
 
+__audio
 static void update_wave(int16_t *left, int16_t *right, int len)
 {
 	struct chan *c = chans + 2;
@@ -310,6 +328,7 @@ static void update_wave(int16_t *left, int16_t *right, int len)
 	}
 }
 
+__audio
 static void update_noise(int16_t *left, int16_t *right, int len)
 {
 	struct chan *c = chans + 3;
@@ -602,6 +621,7 @@ void audio_init(uint8_t* _audio_mem)
 /**
  * Playdate audio callback function.
  */
+__audio
 int audio_callback(void *context, int16_t *left, int16_t *right, int len)
 {
     PGB_GameScene **gameScene_ptr = context;

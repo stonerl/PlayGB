@@ -7,8 +7,8 @@
 
 #include "game_scene.h"
 #include "minigb_apu.h"
-#include "peanut_gb.h"
 #include "app.h"
+#include "peanut_gb.h"
 #include "library_scene.h"
 #include "preferences.h"
 
@@ -44,29 +44,20 @@ static uint8_t PGB_bitmask[4][4][4];
 static bool PGB_GameScene_bitmask_done = false;
 
 #if ITCM_CORE
-static void* core_itcm_reloc = NULL;
-extern char __itcm_start[];
-extern char __itcm_end[];
-#define itcm_core_size ((uintptr_t)&__itcm_end - (uintptr_t)&__itcm_start)
+    void* core_itcm_reloc = NULL;
 
-static void itcm_core_init(void)
-{
-    if (core_itcm_reloc != NULL) return;
-    
-    core_itcm_reloc = dtcm_alloc(itcm_core_size);
-    memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
-    playdate->system->logToConsole("itcm start: %x, end %x: run_frame: %x", &__itcm_start, &__itcm_end, &gb_run_frame);
-    playdate->system->logToConsole("core is 0x%X bytes, relocated at 0x%X", itcm_core_size, core_itcm_reloc);
-    playdate->system->clearICache();
-}
-
-#define ITCM_CORE_FN(fn) ((typeof(fn)*)((uintptr_t)(void*)&fn - (uintptr_t)&__itcm_start + core_itcm_reloc))
-
+    void itcm_core_init(void)
+    {
+        if (core_itcm_reloc != NULL) return;
+        
+        core_itcm_reloc = dtcm_alloc(itcm_core_size);
+        memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
+        playdate->system->logToConsole("itcm start: %x, end %x: run_frame: %x", &__itcm_start, &__itcm_end, &gb_run_frame);
+        playdate->system->logToConsole("core is 0x%X bytes, relocated at 0x%X", itcm_core_size, core_itcm_reloc);
+        playdate->system->clearICache();
+    }
 #else
-
-static void itcm_core_init(void) {}
-#define ITCM_CORE_FN(fn) fn
-
+    void itcm_core_init(void) {}
 #endif
 
 PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
