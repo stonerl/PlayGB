@@ -471,6 +471,8 @@ struct gb_s
         
         /* Playdate custom implementation */
         uint8_t back_fb_enabled : 1;
+        
+        uint32_t line_priority[(LCD_WIDTH+31)/32];
 	} display;
 
 	/**
@@ -1403,7 +1405,13 @@ void __gb_draw_line(struct gb_s *gb)
 {
     uint8_t *pixels = &gb->lcd[gb->gb_reg.LY*LCD_WIDTH_PACKED];
     
+    __builtin_prefetch(gb->display.line_priority, 1);
     __builtin_prefetch(pixels, 1);
+    
+    for (int i = 0; i < PEANUT_GB_ARRAYSIZE(gb->display.line_priority); ++i)
+        gb->display.line_priority[i] = 0;
+    
+    uint32_t priority_bits = 0;
     
     /* If background is enabled, draw it. */
 	if(gb->gb_reg.LCDC & LCDC_BG_ENABLE)
@@ -1476,6 +1484,12 @@ void __gb_draw_line(struct gb_s *gb)
 			t1 >>= 1;
 			t2 >>= 1;
 			px++;
+            priority_bits <<= 1;
+            priority_bits |= (c == 0);
+            if (disp_x % 32 == 0)
+            {
+                gb->display.line_priority[disp_x/32] = priority_bits;
+            }
 		}
 	}
     
@@ -1656,18 +1670,25 @@ void __gb_draw_line(struct gb_s *gb)
             
             uint8_t c_add = (OF & OBJ_PALETTE) ? 4 : 0;
             
+            // get priority bits for what's behind this sprite
+            uint32_t priority = gb->display.line_priority[start/32] >> (start%32);
+            priority |= gb->display.line_priority[start/32 + 1] << (32-(start%32));
+            
 			for(uint8_t disp_x = start; disp_x != end; disp_x += dir)
 			{
 				uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
 				// check transparency / sprite overlap / background overlap
+                
+                const bool priority_masked = ((OF & OBJ_PRIORITY) && !(priority&1));
 
-				if(c && !((OF & OBJ_PRIORITY) && __gb_get_pixel(pixels, disp_x))){
+				if(c && !priority_masked){
 					/* Set pixel colour. */
                     __gb_draw_pixel(pixels, disp_x, /*(*/ gb->display.sp_palette[c + c_add] /* | (c_add)) & ~LCD_PALETTE_BG*/);
 				}
 
                 t1 >>= 1;
                 t2 >>= 1;
+                priority >>= 1;
 			}
 		}
 	}

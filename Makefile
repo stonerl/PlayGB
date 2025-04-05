@@ -50,7 +50,7 @@ UADEFS =
 ULIBDIR =
 
 # List all user libraries here
-ULIBS =
+ULIBS = 
 
 override LDSCRIPT=./link_map.ld
 

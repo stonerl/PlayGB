@@ -338,6 +338,7 @@ static void update_noise(int16_t *left, int16_t *right, int len)
 	{
 		// TODO: precalculate
 		uint32_t freq;
+		if (c->noise.lfsr_div << c->freq == 0) return;
 		freq = DMG_CLOCK_FREQ_U / (c->noise.lfsr_div << c->freq);
 		set_note_freq(c, freq);
 		
