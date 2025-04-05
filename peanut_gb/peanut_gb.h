@@ -1553,7 +1553,19 @@ void __gb_draw_line(struct gb_s *gb)
 			t1 >>= 1;
 			t2 >>= 1;
 			px++;
+            
+            priority_bits <<= 1;
+            priority_bits |= (c == 0);
+            if (disp_x % 32 == 0)
+            {
+                gb->display.line_priority[disp_x/32] = priority_bits;
+            }
 		}
+        
+        // priority where window begins is a bit tricky
+        priority_bits <<= (disp_x % 32);
+        gb->display.line_priority[disp_x/32] &= 0xFFFFFFFF << (disp_x % 32);
+        gb->display.line_priority[disp_x/32] |= priority_bits;
 
 		gb->display.window_clear++; // advance window line
 	}
