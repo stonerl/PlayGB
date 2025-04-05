@@ -429,6 +429,7 @@ void update_fb(uint8_t* restrict framebuffer, uint8_t* restrict lcd, int interla
     }
 }
 
+__space
 static void PGB_GameScene_update(void *object)
 {
     PGB_GameScene *gameScene = object;

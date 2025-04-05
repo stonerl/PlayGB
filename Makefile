@@ -52,4 +52,6 @@ ULIBDIR =
 # List all user libraries here
 ULIBS =
 
+override LDSCRIPT=./link_map.ld
+
 include $(SDK)/C_API/buildsupport/common.mk

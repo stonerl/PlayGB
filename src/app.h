@@ -54,11 +54,12 @@ void* dtcm_alloc(size_t size);
 
 #define PLAYDATE_ROW_STRIDE 52
 
-
 // relocatable and tightly-packed interpreter code
 #ifdef TARGET_SIMULATOR
     #define __core __attribute__((optimize("O0")))
+    #define __space __attribute__((optimize("O0")))
 #else
+    #define __space __attribute__((optimize("Os")))
     #ifdef ITCM_CORE
         #define __core __attribute__((optimize("Os"))) __attribute__((section(".itcm"))) __attribute__((short_call))
     #else
