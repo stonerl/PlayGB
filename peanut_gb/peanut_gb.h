@@ -1173,7 +1173,7 @@ static uint8_t __gb_execute_cb(struct gb_s *gb)
 {
 	uint8_t inst_cycles;
 	uint8_t cbop = __gb_fetch8(gb);
-	uint8_t r = (cbop & 0x7);
+	uint8_t r = (cbop & 0x7)^1;
 	uint8_t b = (cbop >> 3) & 0x7;
 	uint8_t d = (cbop >> 3) & 0x1;
 	uint8_t val;
@@ -1188,49 +1188,21 @@ static uint8_t __gb_execute_cb(struct gb_s *gb)
     case 0xC6:
 		inst_cycles += 8;
     	break;
-    	case 0x46:
+    case 0x46:
 		inst_cycles += 4;
     	break;
 	}
+    
+    if (r == 7)
+    {
+        val = __gb_read(gb, gb->cpu_reg.hl);
+    }
+    else
+    {
+        val = gb->cpu_reg_raw[r];
+    }
 
-	switch(r)
-	{
-	case 0:
-		val = gb->cpu_reg.b;
-		break;
-
-	case 1:
-		val = gb->cpu_reg.c;
-		break;
-
-	case 2:
-		val = gb->cpu_reg.d;
-		break;
-
-	case 3:
-		val = gb->cpu_reg.e;
-		break;
-
-	case 4:
-		val = gb->cpu_reg.h;
-		break;
-
-	case 5:
-		val = gb->cpu_reg.l;
-		break;
-
-	case 6:
-		val = __gb_read(gb, gb->cpu_reg.hl);
-		break;
-
-	/* Only values 0-7 are possible here, so we make the final case
-	 * default to satisfy -Wmaybe-uninitialized warning. */
-	default:
-		val = gb->cpu_reg.a;
-		break;
-	}
-
-	/* TODO: Find out WTF this is doing. */
+	/* switch based on highest 2 bits */
 	switch(cbop >> 6)
 	{
 	case 0x0:
@@ -1326,40 +1298,14 @@ static uint8_t __gb_execute_cb(struct gb_s *gb)
 
 	if(writeback)
 	{
-		switch(r)
-		{
-		case 0:
-			gb->cpu_reg.b = val;
-			break;
-
-		case 1:
-			gb->cpu_reg.c = val;
-			break;
-
-		case 2:
-			gb->cpu_reg.d = val;
-			break;
-
-		case 3:
-			gb->cpu_reg.e = val;
-			break;
-
-		case 4:
-			gb->cpu_reg.h = val;
-			break;
-
-		case 5:
-			gb->cpu_reg.l = val;
-			break;
-
-		case 6:
-			__gb_write(gb, gb->cpu_reg.hl, val);
-			break;
-
-		case 7:
-			gb->cpu_reg.a = val;
-			break;
-		}
+        if (r == 7)
+        {
+            __gb_write(gb, gb->cpu_reg.hl, val);
+        }
+        else
+        {
+            gb->cpu_reg_raw[r] = val;
+        }
 	}
 	return inst_cycles;
 }

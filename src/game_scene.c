@@ -120,7 +120,7 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
     {
         context->rom = rom;
         
-        static uint8_t lcd[LCD_HEIGHT * LCD_WIDTH_PACKED];
+        static uint8_t lcd[LCD_HEIGHT * LCD_WIDTH_PACKED * 2];
         
         enum gb_init_error_e gb_ret = gb_init(context->gb, context->wram, context->vram, lcd, rom, gb_error, context);
         
