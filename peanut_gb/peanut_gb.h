@@ -526,6 +526,7 @@ struct gb_s
     struct gb_breakpoint *breakpoints;
 };
 
+#ifdef PEANUT_GB_IMPL
 /**
  * Tick the internal RTC by one second.
  * This was taken from SameBoy, which is released under MIT Licence.
@@ -4636,11 +4637,14 @@ enum gb_init_error_e gb_init(struct gb_s *gb,
     gb->wram = wram;
     gb->vram = vram;
     gb->lcd = lcd;
+    memset(lcd, 0, LCD_WIDTH_PACKED * LCD_HEIGHT);
 	gb->gb_rom = gb_rom;
 	gb->gb_error = gb_error;
 	gb->direct.priv = priv;
     gb->breakpoint_c = 0;
     gb->breakpoints = NULL;
+    
+    assert(aligned(gb->lcd, CACHE_LINE));
 
 	/* Initialise serial transfer function to NULL. If the front-end does
 	 * not provide serial support, Peanut-GB will emulate no cable connected
@@ -4911,5 +4915,7 @@ static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
         return 1*4; // ?
     }
 }
+
+#endif
 
 #endif //PEANUT_GB_H

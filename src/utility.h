@@ -27,6 +27,9 @@ extern PlaydateAPI *playdate;
 #define PGB_MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define PGB_MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+// size of a cache line on device
+#define CACHE_LINE 32
+
 extern const uint8_t PGB_patterns[4][4][4];
 
 extern const char *PGB_savesPath;
@@ -46,5 +49,20 @@ void* pgb_malloc(size_t size);
 void* pgb_realloc(void *ptr, size_t size);
 void* pgb_calloc(size_t count, size_t size);
 void pgb_free(void *ptr);
+void assert_impl(bool b, const char* msg);
+
+static inline bool aligned(void* v, unsigned align)
+{
+    return (uintptr_t)v % align == 0;
+}
+
+static inline bool cache_aligned(void* v)
+{
+    return aligned(v, CACHE_LINE);
+}
+
+void* pgb_malloc_aligned(size_t size);
+
+#define assert(x) assert_impl(x, #x)
 
 #endif /* utility_h */
