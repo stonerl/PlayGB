@@ -28,6 +28,7 @@ SRC += src/game_scene.c
 SRC += src/array.c
 SRC += src/listview.c
 SRC += src/preferences.c
+SRC += src/rom.c
 
 ASRC = setup.s
 
@@ -51,6 +52,9 @@ ULIBDIR =
 
 # List all user libraries here
 ULIBS = 
+
+# Create main.lua
+$(shell bash ./genmain.sh > Source/main.lua)
 
 override LDSCRIPT=./link_map.ld
 

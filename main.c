@@ -73,19 +73,23 @@ DllExport int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg)
 {
     if (!dtcm_verify()) return 0;
     
-    if(event == kEventInit)
+    switch(event)
     {
+    case kEventInit:
         playdate = pd;
         
         dtcm_init(__builtin_frame_address(0) - PLAYDATE_STACK_SIZE);
+        break;
         
+    case kEventInitLua:
         PGB_init();
         
         pd->system->setUpdateCallback(update, pd);
-    }
-    else if (event == kEventTerminate)
-    {
+        break;
+        
+    case kEventTerminate:
         PGB_quit();
+        break;
     }
     
     return 0;

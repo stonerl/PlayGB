@@ -105,6 +105,9 @@ typedef int16_t s16;
 #define CRAM_BANK_SIZE  0x2000
 #define VRAM_BANK_SIZE  0x2000
 
+/* for lua breakpoints */
+#define HW_BREAKPOINT_OP    0xD3
+
 /* DIV Register is incremented at rate of 16384Hz.
  * 4194304 / 16384 = 256 clock cycles for one increment. */
 #define DIV_CYCLES          256
@@ -349,6 +352,15 @@ enum gb_serial_rx_ret_e
 	GB_SERIAL_RX_NO_CONNECTION = 1
 };
 
+struct gb_breakpoint
+{
+    uint16_t pc;
+    uint16_t bank;
+    uint8_t op;
+    
+    void* ud;
+};
+
 /**
  * Emulator context.
  *
@@ -509,6 +521,9 @@ struct gb_s
 		/* Implementation defined data. Set to NULL if not required. */
 		void *priv;
 	} direct;
+    
+    unsigned breakpoint_c;
+    struct gb_breakpoint *breakpoints;
 };
 
 /**
@@ -4624,6 +4639,8 @@ enum gb_init_error_e gb_init(struct gb_s *gb,
 	gb->gb_rom = gb_rom;
 	gb->gb_error = gb_error;
 	gb->direct.priv = priv;
+    gb->breakpoint_c = 0;
+    gb->breakpoints = NULL;
 
 	/* Initialise serial transfer function to NULL. If the front-end does
 	 * not provide serial support, Peanut-GB will emulate no cable connected
@@ -4716,6 +4733,59 @@ void gb_init_lcd(struct gb_s *gb)
 void gb_init_lcd(struct gb_s *gb) {}
 
 #endif
+
+void user_breakpoint(struct gb_s* gb, void* ud);
+
+struct gb_breakpoint* gb_lookup_breakpoint(struct gb_s* gb, uint16_t pc, unsigned bank, uint8_t** out_op_loc)
+{
+    if (!gb->breakpoints) return NULL;
+    
+    if (pc >= 0x8000) return NULL;
+    
+    if (out_op_loc)
+    {
+        if (pc < 0x4000) *out_op_loc = gb->gb_rom + pc;
+        else *out_op_loc = gb->selected_bank_addr + pc;
+    }
+    
+    for (unsigned i = 0; i < gb->breakpoint_c; ++i)
+    {
+        struct gb_breakpoint* bp = &gb->breakpoints[i];
+        if (bp->pc == pc && (pc < 0x4000 || bank == bp->bank))
+        {
+            return bp;
+        }
+    }
+    
+    return NULL;
+}
+
+bool
+gb_add_breakpoint(struct gb_s* gb, uint16_t pc, unsigned bank, void* ud)
+{
+    if (gb->breakpoint_c % 128 == 0)
+    {
+        gb->breakpoints = playdate->system->realloc(gb->breakpoints, sizeof(struct gb_breakpoint) * (gb->breakpoint_c + 128));
+    }
+    
+    if (!gb->breakpoints) return false;
+    
+    uint8_t* op_loc;
+    if (pc < 0x4000) op_loc = gb->gb_rom + pc;
+    else op_loc = gb->selected_bank_addr + pc;
+    
+    struct gb_breakpoint* breakpoint = &gb->breakpoints[gb->breakpoint_c];
+    breakpoint->pc = pc;
+    breakpoint->bank = bank;
+    breakpoint->ud = ud;
+    breakpoint->op = *op_loc;
+    
+    // replace opcode w/ hardware breakpoint
+    *op_loc = HW_BREAKPOINT_OP;
+    
+    gb->breakpoint_c++;
+    return true;
+}
  
 __shell
 static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
@@ -4764,6 +4834,34 @@ static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
             gb->gb_halt = 1;
         }
         return 1*4;
+    case HW_BREAKPOINT_OP:
+        {
+            uint8_t* bp_op;
+            struct gb_breakpoint* bp = gb_lookup_breakpoint(gb, gb->cpu_reg.pc - 1, gb->selected_rom_bank, &bp_op);
+            if (bp)
+            {
+                gb->cpu_reg.pc -= 1;
+                uint16_t pc = gb->cpu_reg.pc;
+                
+                user_breakpoint(gb, bp->ud);
+                
+                if likely(bp->op != HW_BREAKPOINT_OP && gb->cpu_reg.pc == pc)
+                {
+                    // temporarily insert original opcode
+                    *bp_op = bp->op;
+                    int cycles = ITCM_CORE_FN(__gb_run_instruction_micro)(gb);
+                    *bp_op = HW_BREAKPOINT_OP;
+                    return cycles;
+                }
+                else
+                {
+                    gb->cpu_reg.pc++;
+                }
+            }
+            
+            goto invalid;
+        }
+        break;
     case 0xE0:
         __gb_write(
             gb,
@@ -4807,6 +4905,7 @@ static u8 __gb_rare_instruction(struct gb_s * restrict gb, uint8_t opcode)
         gb->gb_ime = 1;
         return 1*4;
     default:
+    invalid:
         (gb->gb_error)(gb, GB_INVALID_OPCODE, opcode);
         gb->gb_frame = 1;
         return 1*4; // ?
