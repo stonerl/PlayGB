@@ -30,6 +30,7 @@ typedef struct
 {
     char *filename;
     char *fullpath;
+    char *coverPath;
 } PGB_Game;
 
 typedef struct PGB_LibraryScene
@@ -40,6 +41,7 @@ typedef struct PGB_LibraryScene
     PGB_ListView *listView;
     bool firstLoad;
     PGB_LibrarySceneTab tab;
+    int lastSelectedItem;  // Per tracciare l'ultima selezione
 } PGB_LibraryScene;
 
 PGB_LibraryScene *PGB_LibraryScene_new(void);
