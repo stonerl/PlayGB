@@ -23,6 +23,10 @@ typedef struct PGB_GameSceneContext
     uint8_t vram[VRAM_SIZE];
     uint8_t *rom;
     uint8_t *cart_ram;
+    uint8_t
+        previous_lcd[LCD_HEIGHT *
+                     LCD_WIDTH_PACKED];  // Buffer for the previous frame's LCD
+    bool line_has_changed[LCD_HEIGHT];   // Flags for changed lines
 } PGB_GameSceneContext;
 
 static void PGB_GameScene_selector_init(PGB_GameScene *gameScene);
@@ -162,6 +166,17 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
 
             // init lcd
             gb_init_lcd(context->gb);
+
+            // Initialize previous_lcd (e.g., to zeros, or copy initial frame if
+            // meaningful) For simplicity, let's zero it. This means the first
+            // frame will draw everything.
+            memset(context->previous_lcd, 0, sizeof(context->previous_lcd));
+
+            // Mark all lines as changed for the first frame render
+            for (int i = 0; i < LCD_HEIGHT; i++)
+            {
+                context->line_has_changed[i] = true;
+            }
 
             context->gb->direct.frame_skip = 1;
 
@@ -406,68 +421,84 @@ static void gb_error(struct gb_s *gb, const enum gb_error_e gb_err,
 
 typedef typeof(playdate->graphics->markUpdatedRows) markUpdateRows_t;
 
-__core void update_fb(uint8_t *restrict framebuffer, uint8_t *restrict lcd,
-                      int interlace, markUpdateRows_t markUpdateRows)
+__core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
+                                  uint8_t *restrict lcd,
+                                  const bool *restrict line_changed_flags,
+                                  markUpdateRows_t markUpdateRows)
 {
     framebuffer += (PGB_LCD_X / 8);
     const u32 dither = 0b00011111 | (0b00001011 << 8);
     int scale_index = 0;
-    unsigned fb_y = PGB_LCD_HEIGHT + PGB_LCD_Y;
-    for (int y = LCD_HEIGHT; y-- > 0;)
+    unsigned fb_y_playdate_current_bottom =
+        PGB_LCD_Y + PGB_LCD_HEIGHT;  // Bottom of drawable area on Playdate
+
+    for (int y_gb = LCD_HEIGHT;
+         y_gb-- > 0;)  // y_gb is Game Boy line index from top, 143 down to 0
     {
-        // some scanlines are 2 px in thickness, some are 1.
-        int row_height = 2;
+        int row_height_on_playdate = 2;
         if (scale_index++ == 2)
         {
             scale_index = 0;
-            row_height = 1;
+            row_height_on_playdate = 1;
         }
 
-        uint8_t *restrict line = &lcd[y * LCD_WIDTH_PACKED];
-        fb_y -= row_height;
-        uint8_t *restrict fbline = &framebuffer[fb_y * PLAYDATE_ROW_STRIDE];
+        // Calculate the Playdate Y position for the *top* of the current GB
+        // line's representation
+        unsigned int current_line_pd_top_y =
+            fb_y_playdate_current_bottom - row_height_on_playdate;
 
-        if (interlace++ % 2)
-            continue;
-
-        for (int x = LCD_WIDTH_PACKED; x-- > 0;)
+        if (!line_changed_flags[y_gb])
         {
-            uint8_t orgpixels = line[x];
-            uint8_t pixels = orgpixels;
+            // If line not changed, just update the bottom for the next line
+            fb_y_playdate_current_bottom -= row_height_on_playdate;
+            continue;  // Skip drawing
+        }
 
-            // output pixel
+        // Line has changed, draw it
+        fb_y_playdate_current_bottom -=
+            row_height_on_playdate;  // Update bottom for this drawn line
+
+        uint8_t *restrict gb_line_data = &lcd[y_gb * LCD_WIDTH_PACKED];
+        uint8_t *restrict pd_fb_line_top_ptr =
+            &framebuffer[current_line_pd_top_y * PLAYDATE_ROW_STRIDE];
+
+        for (int x_packed_gb = LCD_WIDTH_PACKED; x_packed_gb-- > 0;)
+        {
+            uint8_t orgpixels = gb_line_data[x_packed_gb];
+            uint8_t pixels = orgpixels;
             unsigned p = 0;
 
             for (int i = 0; i < 4; ++i)
-            {
+            {  // Unpack 4 GB pixels from the byte
                 p <<= 2;
                 unsigned c0 = (dither >> (2 * (pixels & 3))) & 3;
                 p |= c0;
-
                 pixels >>= 2;
             }
 
-            u8 *restrict fbpix0 = fbline + x;
+            u8 *restrict pd_fb_target_byte0 = pd_fb_line_top_ptr + x_packed_gb;
+            *pd_fb_target_byte0 = p & 0xFF;
 
-            *fbpix0 = p & 0xFF;
-
-            if (row_height == 2)
+            if (row_height_on_playdate == 2)
             {
-                pixels = orgpixels;
-                fbpix0 += PLAYDATE_ROW_STRIDE;
+                pixels = orgpixels;  // Reset for second dither pattern
+                u8 *restrict pd_fb_target_byte1 =
+                    pd_fb_target_byte0 +
+                    PLAYDATE_ROW_STRIDE;  // Next Playdate row
+                p = 0;  // Reset p for the second row calculation
                 for (int i = 0; i < 4; ++i)
                 {
                     p <<= 2;
-                    unsigned c1 = (dither >> (2 * (pixels & 3) + 8)) & 3;
+                    unsigned c1 = (dither >> (2 * (pixels & 3) + 8)) &
+                                  3;  // Use second part of dither
                     p |= c1;
-
                     pixels >>= 2;
                 }
-                *fbpix0 = p & 0xFF;
+                *pd_fb_target_byte1 = p & 0xFF;
             }
         }
-
-        markUpdateRows(fb_y, fb_y + row_height - 1);
+        markUpdateRows(current_line_pd_top_y,
+                       current_line_pd_top_y + row_height_on_playdate - 1);
     }
 }
 
@@ -602,9 +633,25 @@ __space static void PGB_GameScene_update(void *object)
         memcpy(context->gb, &gb, sizeof(struct gb_s));
 #endif
 
+        uint8_t *current_lcd = context->gb->lcd;
+        bool any_line_changed_this_frame = false;
+        for (int y = 0; y < LCD_HEIGHT; y++)
+        {
+            if (memcmp(&current_lcd[y * LCD_WIDTH_PACKED],
+                       &context->previous_lcd[y * LCD_WIDTH_PACKED],
+                       LCD_WIDTH_PACKED) != 0)
+            {
+                context->line_has_changed[y] = true;
+                any_line_changed_this_frame = true;
+            }
+            else
+            {
+                context->line_has_changed[y] = false;
+            }
+        }
+
         bool gb_draw = context->gb->lcd_master_enable &&
-                       (!context->gb->direct.frame_skip ||
-                        !context->gb->display.frame_skip_count || needsDisplay);
+                       (any_line_changed_this_frame || needsDisplay);
 
         gameScene->scene->preferredRefreshRate = gb_draw ? 60 : 0;
         gameScene->scene->refreshRateCompensation =
@@ -612,14 +659,22 @@ __space static void PGB_GameScene_update(void *object)
 
         if (gb_draw)
         {
-            uint8_t *lcd = context->gb->lcd;
-            static int interlace;
+            if (needsDisplay)
+            {
+                for (int i = 0; i < LCD_HEIGHT; i++)
+                {
+                    context->line_has_changed[i] = true;
+                }
+            }
 
-            interlace = !interlace;
+            ITCM_CORE_FN(update_fb_dirty_lines)(
+                playdate->graphics->getFrame(), current_lcd,
+                context->line_has_changed, playdate->graphics->markUpdatedRows);
 
-            ITCM_CORE_FN(update_fb)(playdate->graphics->getFrame(), lcd,
-                                    interlace,
-                                    playdate->graphics->markUpdatedRows);
+            // Copy after drawing, so previous_lcd holds the state of what was
+            // just drawn (or attempted).
+            memcpy(context->previous_lcd, current_lcd,
+                   LCD_HEIGHT * LCD_WIDTH_PACKED);
         }
 #if 0
             uint8_t *framebuffer = ;
