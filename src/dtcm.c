@@ -1,6 +1,8 @@
 #include "dtcm.h"
 #include "utility.h"
 
+#define __dtcm_ctrl __attribute__((section(".text.dtcm_ctrl")))
+
 #ifdef DTCM_ALLOC
 static uint32_t* dtcm_low_canary_addr = NULL;
 #define DTCM_CANARY 0xDE0DCA94
@@ -12,6 +14,7 @@ static bool is_dtcm_init = false;
 // can allocate global variables from here+
 void* dtcm_mempool = NULL;
 
+__dtcm_ctrl
 void* dtcm_alloc(size_t size)
 {
 #ifdef DTCM_ALLOC
@@ -26,6 +29,7 @@ void* dtcm_alloc(size_t size)
 #endif
 }
 
+__dtcm_ctrl
 void dtcm_init(void)
 {
     if (is_dtcm_init) return;
@@ -45,6 +49,7 @@ void dtcm_init(void)
 #endif
 }
 
+__dtcm_ctrl
 void dtcm_set_mempool(void* addr)
 {
     if (dtcm_mempool != NULL) {
@@ -57,6 +62,7 @@ void dtcm_set_mempool(void* addr)
 #endif
 }
 
+__dtcm_ctrl
 bool dtcm_verify(void)
 {
     if (!is_dtcm_init) return true;
@@ -81,7 +87,7 @@ bool dtcm_verify(void)
 
 bool dtcm_enabled(void)
 {
-#ifndef DTCM_ALLC
+#ifndef DTCM_ALLOC
     return false;
 #endif
     return is_dtcm_init;

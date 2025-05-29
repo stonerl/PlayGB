@@ -13,6 +13,12 @@ SECTIONS
 	    *(.itcm)
 	    *(.itcm.*)
         __itcm_end = .;
+		
+		*(.audio)
+		*(.audio.*)
+		
+		*(.rare)
+		*(.rare.*)
         
 		KEEP(*(.init))
 		KEEP(*(.fini))

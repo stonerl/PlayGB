@@ -42,7 +42,7 @@ UINCDIR += lcd
 # Note: if there are unexplained crashes, try disabling these.
 # DTCM_ALLOC: allow allocating variables in DTCM at the low-address end of the region reserved for the stack.
 # ITCM_CORE (requires DTCM_ALLOC, and special link_map.ld): run core interpreter from ITCM.
-UDEFS = -DDTCM_ALLOC -DITCM_CORE
+UDEFS = -DDTCM_ALLOC -DITCM_CORE -falign-loops=32
 
 # Define ASM defines here
 UADEFS =

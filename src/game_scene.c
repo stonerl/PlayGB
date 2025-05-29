@@ -53,10 +53,22 @@ static bool PGB_GameScene_bitmask_done = false;
 #if ITCM_CORE
 void *core_itcm_reloc = NULL;
 
+__attribute__((section(".rare")))
 void itcm_core_init(void)
 {
+    if (core_itcm_reloc == (void*)&__itcm_start)
+        core_itcm_reloc = NULL;
+    
     if (core_itcm_reloc != NULL)
         return;
+    
+    if (!dtcm_enabled())
+    {
+        // just use original non-relocated code
+        core_itcm_reloc = (void*)&__itcm_start;
+        playdate->system->logToConsole("itcm_core_init but dtcm not enabled");
+        return;
+    }
 
     core_itcm_reloc = dtcm_alloc(itcm_core_size);
     memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
