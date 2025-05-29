@@ -13,13 +13,13 @@
 // but lowers audio quality. (duplicates, triplicates samples, etc.)
 // does not need to be a power of 2.
 #define AUDIO_SAMPLE_REPLICATION 5
-#define AUDIO_SAMPLE_RATE	(44100/AUDIO_SAMPLE_REPLICATION)
+#define AUDIO_SAMPLE_RATE (44100 / AUDIO_SAMPLE_REPLICATION)
 
-#define DMG_CLOCK_FREQ		4194304.0
-#define SCREEN_REFRESH_CYCLES	70224.0
-#define VERTICAL_SYNC		(DMG_CLOCK_FREQ/SCREEN_REFRESH_CYCLES)
+#define DMG_CLOCK_FREQ 4194304.0
+#define SCREEN_REFRESH_CYCLES 70224.0
+#define VERTICAL_SYNC (DMG_CLOCK_FREQ / SCREEN_REFRESH_CYCLES)
 
-#define AUDIO_SAMPLES		((unsigned)(AUDIO_SAMPLE_RATE / VERTICAL_SYNC))
+#define AUDIO_SAMPLES ((unsigned)(AUDIO_SAMPLE_RATE / VERTICAL_SYNC))
 
 /**
  * Read audio register at given address "addr".
@@ -34,7 +34,7 @@ void audio_write(const uint16_t addr, const uint8_t val);
 /**
  * Initialise audio driver.
  */
-void audio_init(uint8_t* audio_mem);
+void audio_init(uint8_t *audio_mem);
 
 /**
  * Playdate audio callback function.
