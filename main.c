@@ -41,6 +41,8 @@ void* dtcm_alloc(size_t size)
 
 static void dtcm_init(void* addr)
 {
+    playdate->system->logToConsole("Top of stack: %p\n", addr);
+    
     #ifdef DTCM_ALLOC
     dtcm_mempool = addr;
     *(uint32_t*)dtcm_mempool = DTCM_CANARY;
