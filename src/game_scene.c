@@ -12,7 +12,6 @@
 #include "app.h"
 #include "library_scene.h"
 #include "preferences.h"
-#include "rom.h"
 
 PGB_GameScene *audioGameScene = NULL;
 
@@ -281,27 +280,7 @@ static uint8_t *read_rom_to_ram(const char *filename,
 
     playdate->file->seek(rom_file, 0, SEEK_END);
     int rom_size = playdate->file->tell(rom_file);
-
-    if (rom_size < 0x150)
-    {
-        playdate->file->close(rom_file);
-        playdate->system->logToConsole("File \"%s\" too small: %d bytes",
-                                       filename, rom_size);
-        return NULL;
-    }
-
-    char header_raw[0x50];
-    playdate->file->seek(rom_file, 0x100, SEEK_SET);
-    playdate->file->read(rom_file, header_raw, 0x50);
     playdate->file->seek(rom_file, 0, SEEK_SET);
-
-    struct gb_header header;
-    gb_read_header(&header, header_raw);
-
-    playdate->lua->pushString(header.title);
-
-    const char *err;
-    playdate->lua->callFunction("on_load_rom", 1, &err);
 
     uint8_t *rom = pgb_malloc(rom_size);
 
@@ -1024,8 +1003,4 @@ static void PGB_GameScene_free(void *object)
 
     pgb_free(context);
     pgb_free(gameScene);
-}
-
-void user_breakpoint(struct gb_s *gb, void *ud)
-{
 }
