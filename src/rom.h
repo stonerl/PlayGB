@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 struct gb_header
 {
@@ -7,16 +7,17 @@ struct gb_header
     union
     {
         char title[17];
-        struct {
+        struct
+        {
             char _[11];
             uint32_t manufacturer;
             char cgb;
         } __attribute__((packed));
     };
-    
+
     uint16_t new_licensee_code;
-    
+
     // TODO: other flags
 };
 
-void gb_read_header(struct gb_header* out, char* header);
+void gb_read_header(struct gb_header *out, char *header);

@@ -9,7 +9,7 @@ ifeq ($(SDK),)
 endif
 
 ifeq ($(SDK),)
-$(error SDK path not found; set ENV value PLAYDATE_SDK_PATH)
+	$(error SDK path not found; set ENV value PLAYDATE_SDK_PATH)
 endif
 
 VPATH += src
@@ -45,13 +45,13 @@ UINCDIR += lcd
 UDEFS = -DDTCM_ALLOC -DITCM_CORE
 
 # Define ASM defines here
-UADEFS = 
+UADEFS =
 
 # List the user directory to look for the libraries here
 ULIBDIR =
 
 # List all user libraries here
-ULIBS = 
+ULIBS =
 
 # Create main.lua
 $(shell bash ./genmain.sh > Source/main.lua)

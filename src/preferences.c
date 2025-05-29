@@ -15,7 +15,8 @@ static SDFile *pref_file;
 bool preferences_sound_enabled = false;
 bool preferences_display_fps = false;
 
-static void cpu_endian_to_big_endian(unsigned char *src, unsigned char *buffer, size_t size, size_t len);
+static void cpu_endian_to_big_endian(unsigned char *src, unsigned char *buffer,
+                                     size_t size, size_t len);
 
 static uint8_t prefereces_read_uint8(void);
 static void prefereces_write_uint8(uint8_t value);
@@ -24,7 +25,7 @@ static void prefereces_write_uint32(uint32_t value);
 
 void prefereces_init(void)
 {
-    if(playdate->file->stat(pref_filename, NULL) != 0)
+    if (playdate->file->stat(pref_filename, NULL) != 0)
     {
         prefereces_save_to_disk();
     }
@@ -37,14 +38,14 @@ void prefereces_init(void)
 void prefereces_read_from_disk(void)
 {
     pref_file = playdate->file->open(pref_filename, kFileReadData);
-    if(pref_file)
+    if (pref_file)
     {
         // read model version
         prefereces_read_uint32();
-        
+
         preferences_sound_enabled = prefereces_read_uint8();
         preferences_display_fps = prefereces_read_uint8();
-        
+
         playdate->file->close(pref_file);
     }
 }
@@ -52,12 +53,12 @@ void prefereces_read_from_disk(void)
 void prefereces_save_to_disk(void)
 {
     pref_file = playdate->file->open(pref_filename, kFileWrite);
-    
+
     prefereces_write_uint32(pref_version);
-    
+
     prefereces_write_uint8(preferences_sound_enabled ? 1 : 0);
     prefereces_write_uint8(preferences_display_fps ? 1 : 0);
-    
+
     playdate->file->close(pref_file);
 }
 
@@ -83,18 +84,20 @@ static uint32_t prefereces_read_uint32(void)
 static void prefereces_write_uint32(uint32_t value)
 {
     unsigned char buffer[sizeof(uint32_t)];
-    cpu_endian_to_big_endian((unsigned char*)&value, buffer, sizeof(uint32_t), 1);
+    cpu_endian_to_big_endian((unsigned char *)&value, buffer, sizeof(uint32_t),
+                             1);
     playdate->file->write(pref_file, buffer, sizeof(uint32_t));
 }
 
-static void cpu_endian_to_big_endian(unsigned char *src, unsigned char *buffer, size_t size, size_t len)
+static void cpu_endian_to_big_endian(unsigned char *src, unsigned char *buffer,
+                                     size_t size, size_t len)
 {
     int x = 1;
-    
-    if(*((char*)&x) == 1)
+
+    if (*((char *)&x) == 1)
     {
         // little endian machine, swap
-        for(size_t i = 0; i < len; i++)
+        for (size_t i = 0; i < len; i++)
         {
             for (size_t ix = 0; ix < size; ix++)
             {

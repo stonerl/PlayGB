@@ -1,8 +1,9 @@
 #include "rom.h"
+
 #include <stdlib.h>
 #include <string.h>
 
-void gb_read_header(struct gb_header* out, char* header)
+void gb_read_header(struct gb_header *out, char *header)
 {
     memset(out, 0, sizeof(*out));
     out->old_licensee_code = header[0x4b];
@@ -10,8 +11,9 @@ void gb_read_header(struct gb_header* out, char* header)
     for (int i = 0; i < 16; ++i)
     {
         char c = header[0x34 + i];
-        if (c < 0) break;
+        if (c < 0)
+            break;
         out->title[i] = c;
-        out->title[i+1] = 0;
+        out->title[i + 1] = 0;
     }
 }
