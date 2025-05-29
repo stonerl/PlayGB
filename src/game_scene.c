@@ -12,6 +12,7 @@
 #include "app.h"
 #include "library_scene.h"
 #include "preferences.h"
+#include "dtcm.h"
 
 PGB_GameScene *audioGameScene = NULL;
 
@@ -115,11 +116,16 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
                    playdate->display->getHeight());
 #endif
 
+    dtcm_init();
     PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
     static struct gb_s *gb = NULL;
     if (gb == NULL)
         gb = dtcm_alloc(sizeof(struct gb_s));
     itcm_core_init();
+    
+    if (PGB_App->soundSource == NULL) {
+        PGB_App->soundSource = playdate->sound->addSource(audio_callback, &audioGameScene, 1);
+    }
     context->gb = gb;
     context->scene = gameScene;
     context->rom = NULL;

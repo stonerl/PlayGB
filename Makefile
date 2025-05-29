@@ -20,6 +20,7 @@ VPATH += minigb_apu
 SRC += minigb_apu/minigb_apu.c
 
 SRC += main.c
+SRC += src/dtcm.c
 SRC += src/app.c
 SRC += src/utility.c
 SRC += src/scene.c

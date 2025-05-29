@@ -40,9 +40,8 @@ void PGB_init(void)
     PGB_App->startSelectBitmap =
         playdate->graphics->loadBitmap("images/selector-start-select", NULL);
 
-    // add audio callback
-    PGB_App->soundSource =
-        playdate->sound->addSource(audio_callback, &audioGameScene, 1);
+    // add audio callback later
+    PGB_App->soundSource = NULL;
 
     // custom frame rate delimiter
     playdate->display->setRefreshRate(0);
