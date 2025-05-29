@@ -157,15 +157,3 @@ void pgb_free(void *ptr)
         playdate->system->realloc(ptr, 0);
     }
 }
-
-void assert_impl(bool b, const char* msg)
-{
-    if (!b) playdate->system->error("Assertion failed: %s", msg);
-}
-
-void* pgb_malloc_aligned(size_t size)
-{
-    size += CACHE_LINE - 1;
-    return (void*)
-        ((((uintptr_t)(pgb_malloc(size)) + CACHE_LINE - 1)/CACHE_LINE)*CACHE_LINE);
-}

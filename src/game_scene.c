@@ -5,8 +5,6 @@
 //  Created by Matteo D'Ignazio on 14/05/22.
 //
 
-#define PEANUT_GB_IMPL
-
 #include "game_scene.h"
 #include "minigb_apu.h"
 #include "app.h"
@@ -53,13 +51,7 @@ static bool PGB_GameScene_bitmask_done = false;
     {
         if (core_itcm_reloc != NULL) return;
         
-        // allocate in tcm, aligned
-        uintptr_t core_itcm_reloc_u = dtcm_alloc(itcm_core_size + CACHE_LINE);
-        core_itcm_reloc_u += CACHE_LINE - 1;
-        core_itcm_reloc_u /= CACHE_LINE;
-        core_itcm_reloc_u *= CACHE_LINE;
-        core_itcm_reloc = (void*)core_itcm_reloc_u;
-        
+        core_itcm_reloc = dtcm_alloc(itcm_core_size);
         memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
         playdate->system->logToConsole("itcm start: %x, end %x: run_frame: %x", &__itcm_start, &__itcm_end, &gb_run_frame);
         playdate->system->logToConsole("core is 0x%X bytes, relocated at 0x%X", itcm_core_size, core_itcm_reloc);
@@ -68,8 +60,6 @@ static bool PGB_GameScene_bitmask_done = false;
 #else
     void itcm_core_init(void) {}
 #endif
-
-static uint8_t* lcd;
 
 PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
 {
@@ -114,7 +104,7 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
     gameScene->debug_highlightFrame = PDRectMake(PGB_LCD_X - 1 - highlightWidth, 0, highlightWidth, playdate->display->getHeight());
     #endif
     
-    PGB_GameSceneContext *context = pgb_malloc_aligned(sizeof(PGB_GameSceneContext));
+    PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
     static struct gb_s* gb = NULL;
     if (gb == NULL) gb = dtcm_alloc(sizeof(struct gb_s));
     itcm_core_init();
@@ -131,7 +121,7 @@ PGB_GameScene* PGB_GameScene_new(const char *rom_filename)
     {
         context->rom = rom;
         
-        if (!lcd) lcd = pgb_malloc_aligned(LCD_HEIGHT * LCD_WIDTH_PACKED * 2);
+        static uint8_t lcd[LCD_HEIGHT * LCD_WIDTH_PACKED * 2];
         
         enum gb_init_error_e gb_ret = gb_init(context->gb, context->wram, context->vram, lcd, rom, gb_error, context);
         
