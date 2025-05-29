@@ -15,9 +15,9 @@
 extern bool preferences_sound_enabled;
 extern bool preferences_display_fps;
 
-void prefereces_init(void);
+void preferences_init(void);
 
-void prefereces_read_from_disk(void);
-void prefereces_save_to_disk(void);
+void preferences_read_from_disk(void);
+void preferences_save_to_disk(void);
 
 #endif /* preferences_h */

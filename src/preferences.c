@@ -18,70 +18,70 @@ bool preferences_display_fps = false;
 static void cpu_endian_to_big_endian(unsigned char *src, unsigned char *buffer,
                                      size_t size, size_t len);
 
-static uint8_t prefereces_read_uint8(void);
-static void prefereces_write_uint8(uint8_t value);
-static uint32_t prefereces_read_uint32(void);
-static void prefereces_write_uint32(uint32_t value);
+static uint8_t preferences_read_uint8(void);
+static void preferences_write_uint8(uint8_t value);
+static uint32_t preferences_read_uint32(void);
+static void preferences_write_uint32(uint32_t value);
 
-void prefereces_init(void)
+void preferences_init(void)
 {
     if (playdate->file->stat(pref_filename, NULL) != 0)
     {
-        prefereces_save_to_disk();
+        preferences_save_to_disk();
     }
     else
     {
-        prefereces_read_from_disk();
+        preferences_read_from_disk();
     }
 }
 
-void prefereces_read_from_disk(void)
+void preferences_read_from_disk(void)
 {
     pref_file = playdate->file->open(pref_filename, kFileReadData);
     if (pref_file)
     {
         // read model version
-        prefereces_read_uint32();
+        preferences_read_uint32();
 
-        preferences_sound_enabled = prefereces_read_uint8();
-        preferences_display_fps = prefereces_read_uint8();
+        preferences_sound_enabled = preferences_read_uint8();
+        preferences_display_fps = preferences_read_uint8();
 
         playdate->file->close(pref_file);
     }
 }
 
-void prefereces_save_to_disk(void)
+void preferences_save_to_disk(void)
 {
     pref_file = playdate->file->open(pref_filename, kFileWrite);
 
-    prefereces_write_uint32(pref_version);
+    preferences_write_uint32(pref_version);
 
-    prefereces_write_uint8(preferences_sound_enabled ? 1 : 0);
-    prefereces_write_uint8(preferences_display_fps ? 1 : 0);
+    preferences_write_uint8(preferences_sound_enabled ? 1 : 0);
+    preferences_write_uint8(preferences_display_fps ? 1 : 0);
 
     playdate->file->close(pref_file);
 }
 
-static uint8_t prefereces_read_uint8(void)
+static uint8_t preferences_read_uint8(void)
 {
     uint8_t buffer[1];
     playdate->file->read(pref_file, buffer, sizeof(uint8_t));
     return buffer[0];
 }
 
-static void prefereces_write_uint8(uint8_t value)
+static void preferences_write_uint8(uint8_t value)
 {
     playdate->file->write(pref_file, &value, sizeof(uint8_t));
 }
 
-static uint32_t prefereces_read_uint32(void)
+static uint32_t preferences_read_uint32(void)
 {
     unsigned char buffer[sizeof(uint32_t)];
     playdate->file->read(pref_file, buffer, sizeof(uint32_t));
     return buffer[0] << 24 | buffer[1] << 16 | buffer[2] << 8 | buffer[3];
 }
 
-static void prefereces_write_uint32(uint32_t value)
+static void preferences_write_uint32(uint32_t value)
 {
     unsigned char buffer[sizeof(uint32_t)];
     cpu_endian_to_big_endian((unsigned char *)&value, buffer, sizeof(uint32_t),

@@ -24,7 +24,7 @@ void PGB_init(void)
     playdate->file->mkdir("games");
     playdate->file->mkdir("saves");
 
-    prefereces_init();
+    preferences_init();
 
     PGB_App->bodyFont =
         playdate->graphics->loadFont("fonts/Roobert-11-Medium", NULL);
@@ -68,7 +68,7 @@ void PGB_update(float dt)
 
         if (PGB_App->scene)
         {
-            prefereces_save_to_disk();
+            preferences_save_to_disk();
 
             void *managedObject = PGB_App->scene->managedObject;
             PGB_App->scene->free(managedObject);
@@ -110,7 +110,7 @@ void PGB_present(PGB_Scene *scene)
 
 void PGB_quit(void)
 {
-    prefereces_save_to_disk();
+    preferences_save_to_disk();
 
     if (PGB_App->scene)
     {

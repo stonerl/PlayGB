@@ -364,9 +364,9 @@ struct gb_s
     /**
      * Notify front-end of error.
      *
-     * \param gb_s			emulator context
-     * \param gb_error_e	error code
-     * \param val			arbitrary value related to error
+     * \param gb_s emulator context
+     * \param gb_error_e error code
+     * \param val arbitrary value related to error
      */
     void (*gb_error)(struct gb_s *, const enum gb_error_e, const uint16_t val);
 
@@ -443,20 +443,20 @@ struct gb_s
         /**
          * Draw line on screen.
          *
-         * \param gb_s		emulator context
-         * \param pixels	The 160 pixels to draw.
-         * 			Bits 1-0 are the colour to draw.
-         * 			Bits 5-4 are the palette, where:
-         * 				OBJ0 = 0b00,
-         * 				OBJ1 = 0b01,
-         * 				BG = 0b10
-         * 			Other bits are undefined.
-         * 			Bits 5-4 are only required by front-ends
-         * 			which want to use a different colour for
-         * 			different object palettes. This is what
-         * 			the Game Boy Color (CGB) does to DMG
-         * 			games.
-         * \param line		Line to draw pixels on. This is
+         * \param gb_s      emulator context
+         * \param pixels    The 160 pixels to draw.
+         *    Bits 1-0 are the colour to draw.
+         *    Bits 5-4 are the palette, where:
+         *      OBJ0 = 0b00,
+         *      OBJ1 = 0b01,
+         *      BG = 0b10
+         *    Other bits are undefined.
+         *    Bits 5-4 are only required by front-ends
+         *    which want to use a different colour for
+         *    different object palettes. This is what
+         *    the Game Boy Color (CGB) does to DMG
+         *    games.
+         * \param line      Line to draw pixels on. This is
          * guaranteed to be between 0-144 inclusive.
          */
 
@@ -1654,7 +1654,7 @@ __shell static unsigned __gb_run_instruction(struct gb_s *gb, uint8_t opcode)
 {
     static const uint8_t op_cycles[0x100] = {
         /* *INDENT-OFF* */
-        /*0 1 2  3  4  5  6  7  8  9  A  B  C  D  E  F	*/
+        /*0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F*/
         4,  12, 8,  8,  4,  4,  8,  4,  20,
         8,  8,  8,  4,  4,  8,  4, /* 0x00 */
         4,  12, 8,  8,  4,  4,  8,  4,  12,
@@ -4937,9 +4937,9 @@ enum gb_init_error_e gb_init(struct gb_s *gb, uint8_t *wram, uint8_t *vram,
 /**
  * Returns the title of ROM.
  *
- * \param gb		Initialised context.
- * \param title_str	Allocated string at least 16 characters.
- * \returns		Pointer to start of string, null terminated.
+ * \param gb        Initialised context.
+ * \param title_str Allocated string at least 16 characters.
+ * \returns         Pointer to start of string, null terminated.
  */
 const char *gb_get_rom_name(struct gb_s *gb, char *title_str)
 {
