@@ -653,9 +653,11 @@ __space static void PGB_GameScene_update(void *object)
         bool gb_draw = context->gb->lcd_master_enable &&
                        (any_line_changed_this_frame || needsDisplay);
 
-        gameScene->scene->preferredRefreshRate = gb_draw ? 60 : 0;
+        // Always request the update loop to run at 60 FPS.
+        // This ensures gb_run_frame() is called at a consistent rate.
+        gameScene->scene->preferredRefreshRate = 60;
         gameScene->scene->refreshRateCompensation =
-            gb_draw ? (1.0f / 60 - PGB_App->dt) : 0;
+            (1.0f / 60.0f - PGB_App->dt);
 
         if (gb_draw)
         {
