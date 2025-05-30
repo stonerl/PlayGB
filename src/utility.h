@@ -48,4 +48,10 @@ void *pgb_realloc(void *ptr, size_t size);
 void *pgb_calloc(size_t count, size_t size);
 void pgb_free(void *ptr);
 
+#ifdef TARGET_PLAYDATE
+    #define __section__(x) __attribute__((section(x)))
+#else
+    #define __section__(x)
+#endif
+
 #endif /* utility_h */

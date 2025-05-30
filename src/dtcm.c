@@ -2,7 +2,7 @@
 
 #include "utility.h"
 
-#define __dtcm_ctrl __attribute__((section(".text.dtcm_ctrl")))
+#define __dtcm_ctrl __section__(".text.dtcm_ctrl")
 
 #ifdef DTCM_ALLOC
 static uint32_t *dtcm_low_canary_addr = NULL;

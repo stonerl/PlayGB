@@ -22,6 +22,7 @@
 static int update(void *userdata);
 int eventHandler_pdnewlib(PlaydateAPI*, PDSystemEvent event, uint32_t arg);
 
+__section__(".text.main")
 DllExport int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg)
 {
     eventHandler_pdnewlib(pd, event, arg);
@@ -48,6 +49,7 @@ DllExport int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg)
     return 0;
 }
 
+__section__(".text.main")
 int update(void *userdata)
 {
     PlaydateAPI *pd = userdata;

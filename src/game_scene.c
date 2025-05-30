@@ -67,7 +67,7 @@ static bool PGB_GameScene_bitmask_done = false;
 #if ITCM_CORE
 void *core_itcm_reloc = NULL;
 
-__attribute__((section(".rare"))) void itcm_core_init(void)
+__section__(".rare") void itcm_core_init(void)
 {
     if (core_itcm_reloc == (void *)&__itcm_start)
         core_itcm_reloc = NULL;
@@ -96,6 +96,7 @@ void itcm_core_init(void)
 {
 }
 #endif
+
 
 PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
 {
@@ -585,6 +586,7 @@ __core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
     }
 }
 
+__section__(".rare")
 __space static void PGB_GameScene_update(void *object)
 {
     PGB_GameScene *gameScene = object;
