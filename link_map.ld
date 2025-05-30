@@ -5,6 +5,7 @@ SECTIONS
 {
 	.text :
 	{        	
+		__text_start__ = .;
 		*(.text)
 		*(.text.*)
 		
@@ -14,9 +15,11 @@ SECTIONS
 	    *(.itcm.*)
         __itcm_end = .;
 		
+		__audio_start__ = .;
 		*(.audio)
 		*(.audio.*)
 		
+		__rare_start__ = .;
 		*(.rare)
 		*(.rare.*)
         
@@ -36,7 +39,8 @@ SECTIONS
  		*(EXCLUDE_FILE(*crtend?.o *crtend.o) .dtors)
  		*(SORT(.dtors.*))
  		*(.dtors)
-
+		
+		__rodata_start__ = .;
 		*(.rodata*)
 
 		KEEP(*(.eh_frame*))
