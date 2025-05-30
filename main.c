@@ -11,6 +11,7 @@
 #include "pd_api.h"
 #include "app.h"
 #include "dtcm.h"
+#include "revcheck.h"
 
 #ifdef _WINDLL
 #define DllExport __declspec(dllexport)
@@ -27,10 +28,10 @@ DllExport int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg)
 
     if (event == kEventInit)
     {
+        pd_revcheck();
         playdate = pd;
         
         dtcm_set_mempool(__builtin_frame_address(0) - PLAYDATE_STACK_SIZE);
-        dtcm_init();
         
         PGB_init();
 

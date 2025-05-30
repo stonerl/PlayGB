@@ -38,7 +38,7 @@
 #define __audio __attribute__((optimize("O0")))
 #else
 #define __audio                                                             \
-    __attribute__((optimize("Os"))) __attribute__((section(".text.audio"))) \
+    __attribute__((optimize("Os"))) __attribute__((section(".audio"))) \
     __attribute__((short_call))
 #endif
 

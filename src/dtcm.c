@@ -18,15 +18,17 @@ __dtcm_ctrl
 void* dtcm_alloc(size_t size)
 {
 #ifdef DTCM_ALLOC
-    void* tmp = dtcm_mempool;
-    *(uint32_t*)dtcm_mempool = 0;
-    dtcm_mempool = (void*)(size + (uintptr_t)dtcm_mempool);
-    // high canary
-    *(uint32_t*)dtcm_mempool = DTCM_CANARY;
-    return tmp;
-#else
-    return playdate->system->realloc(NULL, size);
+    if (is_dtcm_init) {
+        void* tmp = dtcm_mempool;
+        *(uint32_t*)dtcm_mempool = 0;
+        dtcm_mempool = (void*)(size + (uintptr_t)dtcm_mempool);
+        // high canary
+        *(uint32_t*)dtcm_mempool = DTCM_CANARY;
+        return tmp;
+    }
 #endif
+
+    return playdate->system->realloc(NULL, size);
 }
 
 __dtcm_ctrl

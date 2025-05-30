@@ -13,6 +13,7 @@
 #include "library_scene.h"
 #include "preferences.h"
 #include "dtcm.h"
+#include "revcheck.h"
 
 PGB_GameScene *audioGameScene = NULL;
 
@@ -128,7 +129,11 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
                    playdate->display->getHeight());
 #endif
 
-    dtcm_init();
+    // we don't use the DTCM trick on REV_B, because it's untested
+    // FIXME
+    if (pd_rev == PD_REV_A)
+        dtcm_init();
+        
     PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
     static struct gb_s *gb = NULL;
     if (gb == NULL)
