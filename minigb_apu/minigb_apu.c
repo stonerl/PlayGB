@@ -37,7 +37,7 @@
 #ifdef TARGET_SIMULATOR
 #define __audio __attribute__((optimize("O0")))
 #else
-#define __audio                                                             \
+#define __audio                                                        \
     __attribute__((optimize("Os"))) __attribute__((section(".audio"))) \
     __attribute__((short_call))
 #endif

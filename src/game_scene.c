@@ -10,9 +10,9 @@
 #include "../minigb_apu/minigb_apu.h"
 #include "../peanut_gb/peanut_gb.h"
 #include "app.h"
+#include "dtcm.h"
 #include "library_scene.h"
 #include "preferences.h"
-#include "dtcm.h"
 #include "revcheck.h"
 
 static const float TARGET_TIME_PER_GB_FRAME_MS = 1000.0f / 59.73f;
@@ -68,19 +68,18 @@ static bool PGB_GameScene_bitmask_done = false;
 #if ITCM_CORE
 void *core_itcm_reloc = NULL;
 
-__attribute__((section(".rare")))
-void itcm_core_init(void)
+__attribute__((section(".rare"))) void itcm_core_init(void)
 {
-    if (core_itcm_reloc == (void*)&__itcm_start)
+    if (core_itcm_reloc == (void *)&__itcm_start)
         core_itcm_reloc = NULL;
-    
+
     if (core_itcm_reloc != NULL)
         return;
-    
+
     if (!dtcm_enabled())
     {
         // just use original non-relocated code
-        core_itcm_reloc = (void*)&__itcm_start;
+        core_itcm_reloc = (void *)&__itcm_start;
         playdate->system->logToConsole("itcm_core_init but dtcm not enabled");
         return;
     }
@@ -147,15 +146,17 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
     // FIXME
     if (pd_rev == PD_REV_A)
         dtcm_init();
-        
+
     PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
     static struct gb_s *gb = NULL;
     if (gb == NULL)
         gb = dtcm_alloc(sizeof(struct gb_s));
     itcm_core_init();
-    
-    if (PGB_App->soundSource == NULL) {
-        PGB_App->soundSource = playdate->sound->addSource(audio_callback, &audioGameScene, 1);
+
+    if (PGB_App->soundSource == NULL)
+    {
+        PGB_App->soundSource =
+            playdate->sound->addSource(audio_callback, &audioGameScene, 1);
     }
     context->gb = gb;
     context->scene = gameScene;

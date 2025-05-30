@@ -1,10 +1,11 @@
 #include "dtcm.h"
+
 #include "utility.h"
 
 #define __dtcm_ctrl __attribute__((section(".text.dtcm_ctrl")))
 
 #ifdef DTCM_ALLOC
-static uint32_t* dtcm_low_canary_addr = NULL;
+static uint32_t *dtcm_low_canary_addr = NULL;
 #define DTCM_CANARY 0xDE0DCA94
 #endif
 
@@ -12,18 +13,18 @@ static bool is_dtcm_init = false;
 
 // low address that's within stack region,
 // can allocate global variables from here+
-void* dtcm_mempool = NULL;
+void *dtcm_mempool = NULL;
 
-__dtcm_ctrl
-void* dtcm_alloc(size_t size)
+__dtcm_ctrl void *dtcm_alloc(size_t size)
 {
 #ifdef DTCM_ALLOC
-    if (is_dtcm_init) {
-        void* tmp = dtcm_mempool;
-        *(uint32_t*)dtcm_mempool = 0;
-        dtcm_mempool = (void*)(size + (uintptr_t)dtcm_mempool);
+    if (is_dtcm_init)
+    {
+        void *tmp = dtcm_mempool;
+        *(uint32_t *)dtcm_mempool = 0;
+        dtcm_mempool = (void *)(size + (uintptr_t)dtcm_mempool);
         // high canary
-        *(uint32_t*)dtcm_mempool = DTCM_CANARY;
+        *(uint32_t *)dtcm_mempool = DTCM_CANARY;
         return tmp;
     }
 #endif
@@ -31,30 +32,32 @@ void* dtcm_alloc(size_t size)
     return playdate->system->realloc(NULL, size);
 }
 
-__dtcm_ctrl
-void dtcm_init(void)
+__dtcm_ctrl void dtcm_init(void)
 {
-    if (is_dtcm_init) return;
+    if (is_dtcm_init)
+        return;
     is_dtcm_init = true;
-    
-    if (dtcm_mempool == NULL) {
+
+    if (dtcm_mempool == NULL)
+    {
         is_dtcm_init = false;
-        playdate->system->error("Attempt to enable DTCM, but mempool region not set!");
+        playdate->system->error(
+            "Attempt to enable DTCM, but mempool region not set!");
         return;
     }
-    
+
 #ifdef DTCM_ALLOC
-    *(uint32_t*)dtcm_mempool = DTCM_CANARY;
-    dtcm_low_canary_addr = (uint32_t*)dtcm_alloc(sizeof(uint32_t));
+    *(uint32_t *)dtcm_mempool = DTCM_CANARY;
+    dtcm_low_canary_addr = (uint32_t *)dtcm_alloc(sizeof(uint32_t));
     *dtcm_low_canary_addr = DTCM_CANARY;
     playdate->system->logToConsole("DTCM init");
 #endif
 }
 
-__dtcm_ctrl
-void dtcm_set_mempool(void* addr)
+__dtcm_ctrl void dtcm_set_mempool(void *addr)
 {
-    if (dtcm_mempool != NULL) {
+    if (dtcm_mempool != NULL)
+    {
         playdate->system->error("Cannot set DTCM mempool twice.");
         return;
     }
@@ -64,24 +67,26 @@ void dtcm_set_mempool(void* addr)
 #endif
 }
 
-__dtcm_ctrl
-bool dtcm_verify(void)
+__dtcm_ctrl bool dtcm_verify(void)
 {
-    if (!is_dtcm_init) return true;
-    
+    if (!is_dtcm_init)
+        return true;
+
 #ifdef DTCM_ALLOC
     if (dtcm_low_canary_addr)
     {
         if (*dtcm_low_canary_addr != DTCM_CANARY)
         {
-            playdate->system->error("DTCM low canary broken (decrease PLAYDATE_STACK_SIZE?)");
+            playdate->system->error(
+                "DTCM low canary broken (decrease PLAYDATE_STACK_SIZE?)");
             return false;
         }
-        if (*(uint32_t*)dtcm_mempool != DTCM_CANARY)
+        if (*(uint32_t *)dtcm_mempool != DTCM_CANARY)
         {
-            playdate->system->error("DTCM high canary broken (stack overflow?)");
+            playdate->system->error(
+                "DTCM high canary broken (stack overflow?)");
             return false;
-        } 
+        }
     }
 #endif
     return true;

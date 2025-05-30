@@ -8,9 +8,9 @@
 #include <stdio.h>
 
 #include "./src/app.h"
-#include "pd_api.h"
 #include "app.h"
 #include "dtcm.h"
+#include "pd_api.h"
 #include "revcheck.h"
 
 #ifdef _WINDLL
@@ -30,9 +30,9 @@ DllExport int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg)
     {
         pd_revcheck();
         playdate = pd;
-        
+
         dtcm_set_mempool(__builtin_frame_address(0) - PLAYDATE_STACK_SIZE);
-        
+
         PGB_init();
 
         pd->system->setUpdateCallback(update, pd);
