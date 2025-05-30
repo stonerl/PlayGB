@@ -15,6 +15,10 @@
 #include "dtcm.h"
 #include "revcheck.h"
 
+static const float TARGET_TIME_PER_GB_FRAME_MS = 1000.0f / 59.73f;
+static const uint8_t MAX_CONSECUTIVE_DRAW_SKIPS = 2;
+static const uint8_t ADJUSTMENT_PERIOD_FRAMES = 60;
+
 PGB_GameScene *audioGameScene = NULL;
 
 typedef struct PGB_GameSceneContext
@@ -25,6 +29,16 @@ typedef struct PGB_GameSceneContext
     uint8_t vram[VRAM_SIZE];
     uint8_t *rom;
     uint8_t *cart_ram;
+    uint8_t
+        previous_lcd[LCD_HEIGHT *
+                     LCD_WIDTH_PACKED];  // Buffer for the previous frame's LCD
+    bool line_has_changed[LCD_HEIGHT];   // Flags for changed lines
+
+    uint8_t frames_to_skip_drawing;
+    uint8_t frames_actually_skipped_drawing;
+    uint8_t frames_rendered_since_adjustment;
+    uint8_t frames_emulated_since_adjustment;
+    float total_time_for_adjustment_period_ms;
 } PGB_GameSceneContext;
 
 static void PGB_GameScene_selector_init(PGB_GameScene *gameScene);
@@ -148,6 +162,12 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
     context->rom = NULL;
     context->cart_ram = NULL;
 
+    context->frames_to_skip_drawing = 0;
+    context->frames_actually_skipped_drawing = 0;
+    context->frames_rendered_since_adjustment = 0;
+    context->frames_emulated_since_adjustment = 0;
+    context->total_time_for_adjustment_period_ms = 0.0f;
+
     gameScene->context = context;
 
     PGB_GameSceneError romError;
@@ -186,7 +206,17 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
             // init lcd
             gb_init_lcd(context->gb);
 
-            context->gb->direct.frame_skip = 1;
+            // Initialize previous_lcd, for simplicity, let's zero it.
+            // This means the first frame will draw everything.
+            memset(context->previous_lcd, 0, sizeof(context->previous_lcd));
+
+            // Mark all lines as changed for the first frame render
+            for (int i = 0; i < LCD_HEIGHT; i++)
+            {
+                context->line_has_changed[i] = true;
+            }
+
+            context->gb->direct.frame_skip = preferences_frame_skip ? 1 : 0;
 
             // set game state to loaded
             gameScene->state = PGB_GameSceneStateLoaded;
@@ -429,74 +459,98 @@ static void gb_error(struct gb_s *gb, const enum gb_error_e gb_err,
 
 typedef typeof(playdate->graphics->markUpdatedRows) markUpdateRows_t;
 
-__core void update_fb(uint8_t *restrict framebuffer, uint8_t *restrict lcd,
-                      int interlace, markUpdateRows_t markUpdateRows)
+__core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
+                                  uint8_t *restrict lcd,
+                                  const bool *restrict line_changed_flags,
+                                  markUpdateRows_t markUpdateRows)
 {
     framebuffer += (PGB_LCD_X / 8);
     const u32 dither = 0b00011111 | (0b00001011 << 8);
     int scale_index = 0;
-    unsigned fb_y = PGB_LCD_HEIGHT + PGB_LCD_Y;
-    for (int y = LCD_HEIGHT; y-- > 0;)
+    unsigned fb_y_playdate_current_bottom =
+        PGB_LCD_Y + PGB_LCD_HEIGHT;  // Bottom of drawable area on Playdate
+
+    for (int y_gb = LCD_HEIGHT;
+         y_gb-- > 0;)  // y_gb is Game Boy line index from top, 143 down to 0
     {
-        // some scanlines are 2 px in thickness, some are 1.
-        int row_height = 2;
+        int row_height_on_playdate = 2;
         if (scale_index++ == 2)
         {
             scale_index = 0;
-            row_height = 1;
+            row_height_on_playdate = 1;
         }
 
-        uint8_t *restrict line = &lcd[y * LCD_WIDTH_PACKED];
-        fb_y -= row_height;
-        uint8_t *restrict fbline = &framebuffer[fb_y * PLAYDATE_ROW_STRIDE];
+        // Calculate the Playdate Y position for the *top* of the current GB
+        // line's representation
+        unsigned int current_line_pd_top_y =
+            fb_y_playdate_current_bottom - row_height_on_playdate;
 
-        if (interlace++ % 2)
-            continue;
-
-        for (int x = LCD_WIDTH_PACKED; x-- > 0;)
+        if (!line_changed_flags[y_gb])
         {
-            uint8_t orgpixels = line[x];
-            uint8_t pixels = orgpixels;
+            // If line not changed, just update the bottom for the next line
+            fb_y_playdate_current_bottom -= row_height_on_playdate;
+            continue;  // Skip drawing
+        }
 
-            // output pixel
+        // Line has changed, draw it
+        fb_y_playdate_current_bottom -=
+            row_height_on_playdate;  // Update bottom for this drawn line
+
+        uint8_t *restrict gb_line_data = &lcd[y_gb * LCD_WIDTH_PACKED];
+        uint8_t *restrict pd_fb_line_top_ptr =
+            &framebuffer[current_line_pd_top_y * PLAYDATE_ROW_STRIDE];
+
+        for (int x_packed_gb = LCD_WIDTH_PACKED; x_packed_gb-- > 0;)
+        {
+            uint8_t orgpixels = gb_line_data[x_packed_gb];
+            uint8_t pixels = orgpixels;
             unsigned p = 0;
 
             for (int i = 0; i < 4; ++i)
-            {
+            {  // Unpack 4 GB pixels from the byte
                 p <<= 2;
                 unsigned c0 = (dither >> (2 * (pixels & 3))) & 3;
                 p |= c0;
-
                 pixels >>= 2;
             }
 
-            u8 *restrict fbpix0 = fbline + x;
+            u8 *restrict pd_fb_target_byte0 = pd_fb_line_top_ptr + x_packed_gb;
+            *pd_fb_target_byte0 = p & 0xFF;
 
-            *fbpix0 = p & 0xFF;
-
-            if (row_height == 2)
+            if (row_height_on_playdate == 2)
             {
-                pixels = orgpixels;
-                fbpix0 += PLAYDATE_ROW_STRIDE;
+                pixels = orgpixels;  // Reset for second dither pattern
+                u8 *restrict pd_fb_target_byte1 =
+                    pd_fb_target_byte0 +
+                    PLAYDATE_ROW_STRIDE;  // Next Playdate row
+                p = 0;  // Reset p for the second row calculation
                 for (int i = 0; i < 4; ++i)
                 {
                     p <<= 2;
-                    unsigned c1 = (dither >> (2 * (pixels & 3) + 8)) & 3;
+                    unsigned c1 = (dither >> (2 * (pixels & 3) + 8)) &
+                                  3;  // Use second part of dither
                     p |= c1;
-
                     pixels >>= 2;
                 }
-                *fbpix0 = p & 0xFF;
+                *pd_fb_target_byte1 = p & 0xFF;
             }
         }
-
-        markUpdateRows(fb_y, fb_y + row_height - 1);
+        markUpdateRows(current_line_pd_top_y,
+                       current_line_pd_top_y + row_height_on_playdate - 1);
     }
 }
 
 __space static void PGB_GameScene_update(void *object)
 {
     PGB_GameScene *gameScene = object;
+    PGB_GameSceneContext *context = gameScene->context;
+
+    float actual_delta_time_ms = PGB_App->dt * 1000.0f;
+    if (gameScene->state == PGB_GameSceneStateLoaded)
+    {  // Only accumulate if game is running
+        context->total_time_for_adjustment_period_ms += actual_delta_time_ms;
+        context->frames_emulated_since_adjustment++;
+    }
 
     PGB_Scene_update(gameScene->scene);
 
@@ -625,25 +679,121 @@ __space static void PGB_GameScene_update(void *object)
         memcpy(context->gb, &gb, sizeof(struct gb_s));
 #endif
 
-        bool gb_draw = context->gb->lcd_master_enable &&
-                       (!context->gb->direct.frame_skip ||
-                        !context->gb->display.frame_skip_count || needsDisplay);
+        // --- 1. Dynamic Frame Skipping Decision ---
+        bool should_draw_this_frame = true;
 
-        gameScene->scene->preferredRefreshRate = gb_draw ? 60 : 0;
-        gameScene->scene->refreshRateCompensation =
-            gb_draw ? (1.0f / 60 - PGB_App->dt) : 0;
-
-        if (gb_draw)
+        if (context->frames_to_skip_drawing > 0)
         {
-            uint8_t *lcd = context->gb->lcd;
-            static int interlace;
-
-            interlace = !interlace;
-
-            ITCM_CORE_FN(update_fb)(playdate->graphics->getFrame(), lcd,
-                                    interlace,
-                                    playdate->graphics->markUpdatedRows);
+            if (context->frames_actually_skipped_drawing <
+                    context->frames_to_skip_drawing &&
+                context->frames_actually_skipped_drawing <
+                    MAX_CONSECUTIVE_DRAW_SKIPS)
+            {
+                should_draw_this_frame = false;
+                context->frames_actually_skipped_drawing++;
+            }
+            else
+            {
+                // Max skips reached for this burst, or planned skips done.
+                // Force a draw for next opportunity.
+                context->frames_actually_skipped_drawing = 0;
+            }
         }
+        else
+        {
+            context->frames_actually_skipped_drawing =
+                0;  // No planned skips, so reset counter
+        }
+
+        // --- 2. Conditional Screen Update (Drawing) Logic ---
+        if (should_draw_this_frame)
+        {
+            context
+                ->frames_rendered_since_adjustment++;  // Count rendered frames
+                                                       // for potential future
+                                                       // use
+
+            uint8_t *current_lcd = context->gb->lcd;
+            bool any_line_changed_this_frame = false;
+            for (int y = 0; y < LCD_HEIGHT; y++)
+            {
+                if (memcmp(&current_lcd[y * LCD_WIDTH_PACKED],
+                           &context->previous_lcd[y * LCD_WIDTH_PACKED],
+                           LCD_WIDTH_PACKED) != 0)
+                {
+                    context->line_has_changed[y] = true;
+                    any_line_changed_this_frame = true;
+                }
+                else
+                {
+                    context->line_has_changed[y] = false;
+                }
+            }
+
+            // Determine if drawing is actually needed based on changes or
+            // forced display
+            bool actual_gb_draw_needed =
+                context->gb->lcd_master_enable &&
+                (any_line_changed_this_frame || needsDisplay);
+
+            if (actual_gb_draw_needed)
+            {
+                if (needsDisplay)
+                {
+                    for (int i = 0; i < LCD_HEIGHT; i++)
+                    {
+                        context->line_has_changed[i] = true;
+                    }
+                }
+
+                ITCM_CORE_FN(update_fb_dirty_lines)(
+                    playdate->graphics->getFrame(), current_lcd,
+                    context->line_has_changed,
+                    playdate->graphics->markUpdatedRows);
+
+                memcpy(context->previous_lcd, current_lcd,
+                       LCD_HEIGHT * LCD_WIDTH_PACKED);
+            }
+        }
+
+        // --- 3. Adjust Skip Level Periodically ---
+        if (context->frames_emulated_since_adjustment >=
+            ADJUSTMENT_PERIOD_FRAMES)
+        {
+            float average_time_per_emulated_frame_ms =
+                context->total_time_for_adjustment_period_ms /
+                context->frames_emulated_since_adjustment;
+
+            if (average_time_per_emulated_frame_ms >
+                TARGET_TIME_PER_GB_FRAME_MS * 1.1f)
+            {
+                if (context->frames_to_skip_drawing <
+                    MAX_CONSECUTIVE_DRAW_SKIPS)
+                {
+                    context->frames_to_skip_drawing++;
+                }
+            }
+            else if (average_time_per_emulated_frame_ms <
+                     TARGET_TIME_PER_GB_FRAME_MS * 0.9f)
+            {
+                if (context->frames_to_skip_drawing > 0)
+                {
+                    context->frames_to_skip_drawing--;
+                }
+            }
+
+            // Reset for next adjustment period
+            context->total_time_for_adjustment_period_ms = 0.0f;
+            context->frames_emulated_since_adjustment = 0;
+            context->frames_rendered_since_adjustment = 0;
+        }
+
+        // Always request the update loop to run at 60 FPS.
+        // This ensures gb_run_frame() is called at a consistent rate.
+        gameScene->scene->preferredRefreshRate = 60;
+        gameScene->scene->refreshRateCompensation =
+            (1.0f / 60.0f - PGB_App->dt);
+
 #if 0
             uint8_t *framebuffer = ;
 

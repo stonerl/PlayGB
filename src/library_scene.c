@@ -18,6 +18,7 @@ static void PGB_LibraryScene_menu(void *object);
 
 static PDMenuItem *audioMenuItem;
 static PDMenuItem *fpsMenuItem;
+static PDMenuItem *frameSkipMenuItem;
 
 PGB_LibraryScene *PGB_LibraryScene_new(void)
 {
@@ -35,11 +36,11 @@ PGB_LibraryScene *PGB_LibraryScene_new(void)
     libraryScene->model =
         (PGB_LibrarySceneModel){.empty = true, .tab = PGB_LibrarySceneTabList};
 
-    libraryScene->firstLoad = false;
-
     libraryScene->games = array_new();
     libraryScene->listView = PGB_ListView_new();
     libraryScene->tab = PGB_LibrarySceneTabList;
+
+    PGB_LibraryScene_reloadList(libraryScene);
 
     return libraryScene;
 }
@@ -115,12 +116,6 @@ static void PGB_LibraryScene_update(void *object)
     PGB_LibraryScene *libraryScene = object;
 
     PGB_Scene_update(libraryScene->scene);
-
-    if (!libraryScene->firstLoad)
-    {
-        libraryScene->firstLoad = true;
-        PGB_LibraryScene_reloadList(libraryScene);
-    }
 
     PDButtons released;
     playdate->system->getButtonState(NULL, NULL, &released);
@@ -220,12 +215,6 @@ static void PGB_LibraryScene_update(void *object)
     }
 }
 
-static void PGB_LibraryScene_didSelectRefresh(void *userdata)
-{
-    PGB_LibraryScene *libraryScene = userdata;
-    PGB_LibraryScene_reloadList(libraryScene);
-}
-
 static void PGB_LibraryScene_didChangeSound(void *userdata)
 {
     preferences_sound_enabled =
@@ -237,16 +226,22 @@ static void PGB_LibraryScene_didChangeFPS(void *userdata)
     preferences_display_fps = playdate->system->getMenuItemValue(fpsMenuItem);
 }
 
+static void PGB_LibraryScene_didChangeFrameSkip(void *userdata)
+{
+    preferences_frame_skip =
+        playdate->system->getMenuItemValue(frameSkipMenuItem);
+}
+
 static void PGB_LibraryScene_menu(void *object)
 {
     PGB_LibraryScene *libraryScene = object;
 
-    // playdate->system->addMenuItem("Refresh",
-    // PGB_LibraryScene_didSelectRefresh, libraryScene);
-
     audioMenuItem = playdate->system->addCheckmarkMenuItem(
         "Sound", preferences_sound_enabled, PGB_LibraryScene_didChangeSound,
         libraryScene);
+    frameSkipMenuItem = playdate->system->addCheckmarkMenuItem(
+        "Frame skip", preferences_frame_skip,
+        PGB_LibraryScene_didChangeFrameSkip, libraryScene);
     fpsMenuItem = playdate->system->addCheckmarkMenuItem(
         "Show FPS", preferences_display_fps, PGB_LibraryScene_didChangeFPS,
         libraryScene);

@@ -479,9 +479,9 @@ static void chan_trigger(uint_fast8_t i)
 
 /**
  * Read audio register.
- * \param addr	Address of audio register. Must be 0xFF10 <= addr <= 0xFF3F.
- *				This is not checked in this function.
- * \return	Byte at address.
+ * \param addr  Address of audio register. Must be 0xFF10 <= addr <= 0xFF3F.
+ *              This is not checked in this function.
+ * \return      Byte at address.
  */
 uint8_t audio_read(const uint16_t addr)
 {
@@ -497,9 +497,9 @@ uint8_t audio_read(const uint16_t addr)
 
 /**
  * Write audio register.
- * \param addr	Address of audio register. Must be 0xFF10 <= addr <= 0xFF3F.
- *				This is not checked in this function.
- * \param val	Byte to write at address.
+ * \param addr  Address of audio register. Must be 0xFF10 <= addr <= 0xFF3F.
+ *              This is not checked in this function.
+ * \param val   Byte to write at address.
  */
 void audio_write(const uint16_t addr, const uint8_t val)
 {
