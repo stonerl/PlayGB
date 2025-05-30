@@ -36,7 +36,6 @@ typedef struct PGB_GameSceneContext
 
     uint8_t frames_to_skip_drawing;
     uint8_t frames_actually_skipped_drawing;
-    uint8_t frames_rendered_since_adjustment;
     uint8_t frames_emulated_since_adjustment;
     float total_time_for_adjustment_period_ms;
 } PGB_GameSceneContext;
@@ -167,7 +166,6 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
 
     context->frames_to_skip_drawing = 0;
     context->frames_actually_skipped_drawing = 0;
-    context->frames_rendered_since_adjustment = 0;
     context->frames_emulated_since_adjustment = 0;
     context->total_time_for_adjustment_period_ms = 0.0f;
 
@@ -747,11 +745,6 @@ __space static void PGB_GameScene_update(void *object)
         // --- 2. Conditional Screen Update (Drawing) Logic ---
         if (should_draw_this_frame)
         {
-            context
-                ->frames_rendered_since_adjustment++;  // Count rendered frames
-                                                       // for potential future
-                                                       // use
-
             uint8_t *current_lcd = context->gb->lcd;
             bool any_line_changed_this_frame = false;
             for (int y = 0; y < LCD_HEIGHT; y++)
@@ -824,7 +817,6 @@ __space static void PGB_GameScene_update(void *object)
             // Reset for next adjustment period
             context->total_time_for_adjustment_period_ms = 0.0f;
             context->frames_emulated_since_adjustment = 0;
-            context->frames_rendered_since_adjustment = 0;
         }
 
         // Always request the update loop to run at 60 FPS.
