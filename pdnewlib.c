@@ -14,6 +14,8 @@ static PlaydateAPI* pd;
 
 static int _is_init = 0;
 
+static PlaydateAPI* pd;
+
 __attribute__((constructor))
 static void _init(void)
 {
@@ -27,7 +29,7 @@ int eventHandler_pdnewlib(PlaydateAPI* _pd, PDSystemEvent event, uint32_t arg)
 		pd = _pd;
 		if (!_is_init)
 		{
-			pd->system->error("Error: .init is not implemented.\nIf you are a developer, please ensure that the event handler in setup.c is up-to-date and implements .init_array execution.");
+			printf("Warning: __attribute__((constructor)) not supported");
 		}
 	}
 	return 0;
