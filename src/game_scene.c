@@ -193,7 +193,7 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
                 context->line_has_changed[i] = true;
             }
 
-            context->gb->direct.frame_skip = 1;
+            context->gb->direct.frame_skip = preferences_frame_skip ? 1 : 0;
 
             // set game state to loaded
             gameScene->state = PGB_GameSceneStateLoaded;

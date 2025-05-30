@@ -14,6 +14,7 @@
 
 extern bool preferences_sound_enabled;
 extern bool preferences_display_fps;
+extern bool preferences_frame_skip;
 
 void preferences_init(void);
 
