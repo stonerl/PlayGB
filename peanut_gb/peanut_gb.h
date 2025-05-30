@@ -364,9 +364,9 @@ struct gb_s
     /**
      * Notify front-end of error.
      *
-     * \param gb_s emulator context
-     * \param gb_error_e error code
-     * \param val arbitrary value related to error
+     * \param gb_s          emulator context
+     * \param gb_error_e    error code
+     * \param val           arbitrary value related to error
      */
     void (*gb_error)(struct gb_s *, const enum gb_error_e, const uint16_t val);
 
@@ -445,19 +445,19 @@ struct gb_s
          *
          * \param gb_s      emulator context
          * \param pixels    The 160 pixels to draw.
-         *    Bits 1-0 are the colour to draw.
-         *    Bits 5-4 are the palette, where:
-         *      OBJ0 = 0b00,
-         *      OBJ1 = 0b01,
-         *      BG = 0b10
-         *    Other bits are undefined.
-         *    Bits 5-4 are only required by front-ends
-         *    which want to use a different colour for
-         *    different object palettes. This is what
-         *    the Game Boy Color (CGB) does to DMG
-         *    games.
+         *                  Bits 1-0 are the colour to draw.
+         *                  Bits 5-4 are the palette, where:
+         *                      OBJ0 = 0b00,
+         *                      OBJ1 = 0b01,
+         *                      BG = 0b10
+         *                  Other bits are undefined.
+         *                  Bits 5-4 are only required by front-ends
+         *                  which want to use a different colour for
+         *                  different object palettes. This is what
+         *                  the Game Boy Color (CGB) does to DMG
+         *                  games.
          * \param line      Line to draw pixels on. This is
-         * guaranteed to be between 0-144 inclusive.
+         *                  guaranteed to be between 0-144 inclusive.
          */
 
         /* Palettes */
@@ -657,13 +657,18 @@ __shell uint8_t __gb_read_full(struct gb_s *gb, const uint_fast16_t addr)
                 return audio_read(addr);
             }
             else
-            {
+            { /* clang-format off */
                 static const uint8_t ortab[] = {
-                    0x80, 0x3f, 0x00, 0xff, 0xbf, 0xff, 0x3f, 0x00, 0xff, 0xbf,
-                    0x7f, 0xff, 0x9f, 0xff, 0xbf, 0xff, 0xff, 0x00, 0x00, 0xbf,
-                    0x00, 0x00, 0x70, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                    0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+                    0x80, 0x3f, 0x00, 0xff, 0xbf,
+                    0xff, 0x3f, 0x00, 0xff, 0xbf,
+                    0x7f, 0xff, 0x9f, 0xff, 0xbf,
+                    0xff, 0xff, 0x00, 0x00, 0xbf,
+                    0x00, 0x00, 0x70,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+                };
+                /* clang-format on */
                 return gb->hram[addr - IO_ADDR] | ortab[addr - IO_ADDR];
             }
         }
@@ -1660,44 +1665,28 @@ __core void __gb_draw_line(struct gb_s *gb)
 __shell static unsigned __gb_run_instruction(struct gb_s *gb, uint8_t opcode)
 {
     static const uint8_t op_cycles[0x100] = {
-        /* *INDENT-OFF* */
-        /*0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F*/
-        4,  12, 8,  8,  4,  4,  8,  4,  20,
-        8,  8,  8,  4,  4,  8,  4, /* 0x00 */
-        4,  12, 8,  8,  4,  4,  8,  4,  12,
-        8,  8,  8,  4,  4,  8,  4, /* 0x10 */
-        8,  12, 8,  8,  4,  4,  8,  4,  8,
-        8,  8,  8,  4,  4,  8,  4, /* 0x20 */
-        8,  12, 8,  8,  12, 12, 12, 4,  8,
-        8,  8,  8,  4,  4,  8,  4, /* 0x30 */
+        /* clang-format off */
+        /*  0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F   */
+            4,  12, 8,  8,  4,  4,  8,  4,  20, 8,  8,  8,  4,  4,  8,  4,  /* 0x00 */
+            4,  12, 8,  8,  4,  4,  8,  4,  12, 8,  8,  8,  4,  4,  8,  4,  /* 0x10 */
+            8,  12, 8,  8,  4,  4,  8,  4,  8,  8,  8,  8,  4,  4,  8,  4,  /* 0x20 */
+            8,  12, 8,  8,  12, 12, 12, 4,  8,  8,  8,  8,  4,  4,  8,  4,  /* 0x30 */
 
-        4,  4,  4,  4,  4,  4,  8,  4,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0x40 */
-        4,  4,  4,  4,  4,  4,  8,  4,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0x50 */
-        4,  4,  4,  4,  4,  4,  8,  4,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0x60 */
-        8,  8,  8,  8,  8,  8,  4,  8,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0x70 */
+            4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0x40 */
+            4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0x50 */
+            4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0x60 */
+            8,  8,  8,  8,  8,  8,  4,  8,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0x70 */
 
-        4,  4,  4,  4,  4,  4,  8,  4,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0x80 */
-        4,  4,  4,  4,  4,  4,  8,  4,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0x90 */
-        4,  4,  4,  4,  4,  4,  8,  4,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0xA0 */
-        4,  4,  4,  4,  4,  4,  8,  4,  4,
-        4,  4,  4,  4,  4,  8,  4, /* 0xB0 */
+            4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0x80 */
+            4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0x90 */
+            4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0xA0 */
+            4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,  /* 0xB0 */
 
-        8,  12, 12, 16, 12, 16, 8,  16, 8,
-        16, 12, 8,  12, 24, 8,  16, /* 0xC0 */
-        8,  12, 12, 0,  12, 16, 8,  16, 8,
-        16, 12, 0,  12, 0,  8,  16, /* 0xD0 */
-        12, 12, 8,  0,  0,  16, 8,  16, 16,
-        4,  16, 0,  0,  0,  8,  16, /* 0xE0 */
-        12, 12, 8,  4,  0,  16, 8,  16, 12,
-        8,  16, 4,  0,  0,  8,  16 /* 0xF0 */
-                                   /* *INDENT-ON* */
+            8,  12, 12, 16, 12, 16, 8,  16, 8,  16, 12, 8,  12, 24, 8,  16, /* 0xC0 */
+            8,  12, 12, 0,  12, 16, 8,  16, 8,  16, 12, 0,  12, 0,  8,  16, /* 0xD0 */
+            12, 12, 8,  0,  0,  16, 8,  16, 16, 4,  16, 0,  0,  0,  8,  16, /* 0xE0 */
+            12, 12, 8,  4,  0,  16, 8,  16, 12, 8,  16, 4,  0,  0,  8,  16  /* 0xF0 */
+        /* clang-format on */
     };
     uint8_t inst_cycles = op_cycles[opcode];
 
@@ -4886,13 +4875,26 @@ enum gb_init_error_e gb_init(struct gb_s *gb, uint8_t *wram, uint8_t *vram,
      * TODO: HuC3 is unsupported.
      * TODO: HuC1 is unsupported.
      **/
-    const uint8_t cart_mbc[] = {0,  1,  1,  1,  -1, 2, 2, -1, 0, 0,  -1,
-                                0,  0,  0,  -1, 3,  3, 3, 3,  3, -1, -1,
-                                -1, -1, -1, 5,  5,  5, 5, 5,  5, -1};
-    const uint8_t cart_ram[] = {0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
-                                1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0};
-    const uint16_t num_rom_banks_mask[] = {2, 4, 8, 16, 32, 64, 128, 256, 512};
-    const uint8_t num_ram_banks[] = {0, 1, 1, 4, 16, 8};
+    /* clang-format off */
+    const uint8_t cart_mbc[] =
+    {
+        0, 1, 1, 1, -1,  2,  2, -1,  0, 0, -1, 0, 0, 0, -1,  3,
+        3, 3, 3, 3, -1, -1, -1, -1, -1, 5,  5, 5, 5, 5,  5, -1
+    };
+    const uint8_t cart_ram[] =
+    {
+        0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
+        1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0
+    };
+    const uint16_t num_rom_banks_mask[] =
+    {
+        2, 4, 8, 16, 32, 64, 128, 256, 512
+    };
+    const uint8_t num_ram_banks[] =
+    {
+        0, 1, 1, 4, 16, 8
+    };
+    /* clang-format on */
 
     gb->wram = wram;
     gb->vram = vram;
