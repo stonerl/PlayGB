@@ -1617,33 +1617,40 @@ __core void __gb_draw_line(struct gb_s *gb)
 
             uint8_t c_add = (OF & OBJ_PALETTE) ? 4 : 0;
 
-            // get priority bits for what's behind this sprite
-            uint32_t priority =
-                gb->display.line_priority[start / 32] >> (start % 32);
-            priority |= gb->display.line_priority[start / 32 + 1]
-                        << (32 - (start % 32));
-
             for (uint8_t disp_x = start; disp_x != end; disp_x += dir)
             {
                 uint8_t c = (t1 & 0x1) | ((t2 & 0x1) << 1);
                 // check transparency / sprite overlap / background overlap
-
-                const bool priority_masked =
-                    ((OF & OBJ_PRIORITY) && !(priority & 1));
-
-                if (c && !priority_masked)
+                if (c != 0)  // Sprite palette index 0 is transparent
                 {
-                    /* Set pixel colour. */
-                    __gb_draw_pixel(
-                        pixels, disp_x,
-                        /*(*/
-                        gb->display.sp_palette
-                            [c + c_add] /* | (c_add)) & ~LCD_PALETTE_BG*/);
+                    int P_segment_index = disp_x / 32;
+                    int P_bit_in_segment = disp_x % 32;
+
+                    uint8_t background_pixel_is_transparent = 0;
+                    if (P_segment_index >= 0 &&
+                        P_segment_index <
+                            PEANUT_GB_ARRAYSIZE(gb->display.line_priority))
+                    {
+                        background_pixel_is_transparent =
+                            (gb->display.line_priority[P_segment_index] >>
+                             P_bit_in_segment) &
+                            1;
+                    }
+
+                    bool sprite_has_behind_bg_attr = (OF & OBJ_PRIORITY);
+                    bool should_hide_sprite_pixel =
+                        sprite_has_behind_bg_attr &&
+                        !background_pixel_is_transparent;
+
+                    if (!should_hide_sprite_pixel)
+                    {
+                        __gb_draw_pixel(pixels, disp_x,
+                                        gb->display.sp_palette[c + c_add]);
+                    }
                 }
 
                 t1 >>= 1;
                 t2 >>= 1;
-                priority >>= 1;
             }
         }
     }
