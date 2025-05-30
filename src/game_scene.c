@@ -112,7 +112,9 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
 
     scene->preferredRefreshRate = 30;
 
-    gameScene->rtc_timer = 0;
+    gameScene->rtc_time = playdate->system->getSecondsSinceEpoch(NULL);
+    gameScene->rtc_seconds_to_catch_up = 0;
+    gameScene->rtc_fractional_second_accumulator = 0.0f;
 
     gameScene->rom_filename = string_copy(rom_filename);
     gameScene->save_filename = NULL;
@@ -192,6 +194,42 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
                                gb_get_save_size(context->gb));
 
             context->gb->gb_cart_ram = context->cart_ram;
+
+            uint8_t actual_cartridge_type = context->gb->gb_rom[0x0147];
+            if (actual_cartridge_type == 0x0F || actual_cartridge_type == 0x10)
+            {
+                gameScene->cartridge_has_rtc = true;
+                playdate->system->logToConsole(
+                    "Cartridge Type 0x%02X: RTC Enabled.",
+                    actual_cartridge_type);
+
+                // Initialize Playdate-side RTC tracking variables
+                gameScene->rtc_time =
+                    playdate->system->getSecondsSinceEpoch(NULL);
+                gameScene->rtc_seconds_to_catch_up = 0;
+                gameScene->rtc_fractional_second_accumulator = 0.0f;
+
+                // Set the GB core's RTC
+                time_t time_for_core =
+                    gameScene->rtc_time + 946684800;  // Unix epoch
+                struct tm *timeinfo = localtime(&time_for_core);
+                if (timeinfo != NULL)
+                {
+                    gb_set_rtc(context->gb, timeinfo);
+                }
+                else
+                {
+                    playdate->system->logToConsole(
+                        "Error: localtime() failed during RTC setup.");
+                }
+            }
+            else
+            {
+                gameScene->cartridge_has_rtc = false;
+                playdate->system->logToConsole(
+                    "Cartridge Type 0x%02X (MBC: %d): RTC Disabled.",
+                    actual_cartridge_type, context->gb->mbc);
+            }
 
             audio_init(gb->hram + 0x10);
             if (gameScene->audioEnabled)
@@ -897,12 +935,44 @@ __space static void PGB_GameScene_update(void *object)
         }
 #endif
 
-        gameScene->rtc_timer += PGB_App->dt;
-
-        if (gameScene->rtc_timer >= 1)
+        if (gameScene->cartridge_has_rtc)
         {
-            gameScene->rtc_timer = gameScene->rtc_timer - 1;
-            gb_tick_rtc(context->gb);
+            const uint8_t MAX_RTC_TICKS_PER_FRAME = 1;
+            const uint8_t MAX_CATCH_UP_INCREMENT = 255;  // 4 minutes 15 seconds
+
+            gameScene->rtc_fractional_second_accumulator += PGB_App->dt;
+
+            if (gameScene->rtc_fractional_second_accumulator >= 1.0f)
+            {
+                unsigned int total_whole_seconds_accumulated =
+                    (unsigned int)gameScene->rtc_fractional_second_accumulator;
+
+                uint8_t seconds_to_process_now;
+
+                if (total_whole_seconds_accumulated > MAX_CATCH_UP_INCREMENT)
+                {
+                    seconds_to_process_now = MAX_CATCH_UP_INCREMENT;
+                }
+                else
+                {
+                    seconds_to_process_now =
+                        (uint8_t)total_whole_seconds_accumulated;
+                }
+
+                gameScene->rtc_seconds_to_catch_up += seconds_to_process_now;
+                gameScene->rtc_fractional_second_accumulator -=
+                    (float)seconds_to_process_now;
+                gameScene->rtc_time += seconds_to_process_now;
+            }
+
+            uint8_t ticks_this_frame = 0;
+            while (gameScene->rtc_seconds_to_catch_up > 0 &&
+                   ticks_this_frame < MAX_RTC_TICKS_PER_FRAME)
+            {
+                gb_tick_rtc(context->gb);
+                gameScene->rtc_seconds_to_catch_up--;
+                ticks_this_frame++;
+            }
         }
 
         if (needsDisplay)

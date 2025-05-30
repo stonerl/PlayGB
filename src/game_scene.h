@@ -71,6 +71,12 @@ typedef struct PGB_GameScene
     bool needsDisplay;
     bool audioEnabled;
     bool audioLocked;
+    bool cartridge_has_rtc;
+
+    unsigned int rtc_time;
+    uint16_t rtc_seconds_to_catch_up;
+
+    float rtc_fractional_second_accumulator;
 
     PGB_GameSceneState state;
     PGB_GameSceneContext *context;
@@ -83,8 +89,6 @@ typedef struct PGB_GameScene
     PDRect debug_highlightFrame;
     bool debug_updatedRows[LCD_ROWS];
 #endif
-
-    float rtc_timer;
 } PGB_GameScene;
 
 PGB_GameScene *PGB_GameScene_new(const char *rom_filename);
