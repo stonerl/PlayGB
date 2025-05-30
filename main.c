@@ -20,9 +20,12 @@
 #endif
 
 static int update(void *userdata);
+int eventHandler_pdnewlib(PlaydateAPI*, PDSystemEvent event, uint32_t arg);
 
 DllExport int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg)
 {
+    eventHandler_pdnewlib(pd, event, arg);
+    
     if (!dtcm_verify())
         return 0;
 

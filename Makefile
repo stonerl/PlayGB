@@ -20,6 +20,7 @@ VPATH += minigb_apu
 SRC += minigb_apu/minigb_apu.c
 
 SRC += main.c
+SRC += pdnewlib.c
 SRC += src/dtcm.c
 SRC += src/revcheck.c
 SRC += src/app.c
