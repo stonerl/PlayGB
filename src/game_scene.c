@@ -83,7 +83,8 @@ __section__(".rare") void itcm_core_init(void)
         return;
     }
 
-    core_itcm_reloc = dtcm_alloc(itcm_core_size);
+    // make region to copy instructions to; ensure it has same cache alignment
+    core_itcm_reloc = dtcm_alloc_aligned(itcm_core_size, (uintptr_t)&__itcm_start);
     memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
     playdate->system->logToConsole("itcm start: %x, end %x: run_frame: %x",
                                    &__itcm_start, &__itcm_end, &gb_run_frame);

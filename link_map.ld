@@ -1,6 +1,16 @@
 ENTRY(eventHandlerShim)
 GROUP(libgcc.a libc.a libm.a)
 
+/* Forces a particular cache-line alignment, for stability
+	(reduce impact of "performance lottery")
+	
+	The particular values used were just ones that seem to
+	give good performance, but further tinkering may be desirable.
+	
+	. = ALIGN(32);
+	. += (OFFSET);
+*/
+
 SECTIONS
 {
 	.text :
@@ -9,7 +19,9 @@ SECTIONS
 		*(.text)
 		*(.text.*)
 		
+		
 		/* code to copy to TCM, seemingly runs faster */
+		. = ALIGN(32); . += 0x04;
         __itcm_start = .;
 	    *(.itcm)
 	    *(.itcm.*)

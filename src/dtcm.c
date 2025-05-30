@@ -32,6 +32,17 @@ __dtcm_ctrl void *dtcm_alloc(size_t size)
     return playdate->system->realloc(NULL, size);
 }
 
+__dtcm_ctrl void *dtcm_alloc_aligned(size_t size, size_t offset)
+{
+    offset %= 32;
+    uintptr_t u = (uintptr_t)dtcm_alloc(size + 32);
+    
+    // smallest integer n >= u, s.t. n % 32 == offset
+    return (void*)(
+        u + ((offset - (u % 32) + 32) % 32)
+    );
+}
+
 __dtcm_ctrl void dtcm_init(void)
 {
     if (is_dtcm_init)

@@ -11,3 +11,4 @@ bool dtcm_verify(void);
 bool dtcm_enabled(void);  // true if dtcm_init called and DTCM_ALLOC enabled
 
 void *dtcm_alloc(size_t size);
+void *dtcm_alloc_aligned(size_t size, size_t offset);
