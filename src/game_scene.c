@@ -150,8 +150,16 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
 
     PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
     static struct gb_s *gb = NULL;
-    if (gb == NULL)
-        gb = dtcm_alloc(sizeof(struct gb_s));
+    static struct gb_s gb_fallback; // use this gb struct if dtcm alloc not available
+    if (dtcm_enabled())
+    {
+        if (gb == NULL || gb == &gb_fallback)
+            gb = dtcm_alloc(sizeof(struct gb_s));
+    }
+    else
+    {
+        gb = &gb_fallback;
+    }
     itcm_core_init();
 
     if (PGB_App->soundSource == NULL)
