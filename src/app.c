@@ -50,8 +50,7 @@ void PGB_init(void)
     PGB_present(libraryScene->scene);
 }
 
-__section__(".text.main")
-void PGB_update(float dt)
+__section__(".text.main") void PGB_update(float dt)
 {
     PGB_App->dt = dt;
     PGB_App->crankChange = playdate->system->getCrankChange();

@@ -84,7 +84,8 @@ __section__(".rare") void itcm_core_init(void)
     }
 
     // make region to copy instructions to; ensure it has same cache alignment
-    core_itcm_reloc = dtcm_alloc_aligned(itcm_core_size, (uintptr_t)&__itcm_start);
+    core_itcm_reloc =
+        dtcm_alloc_aligned(itcm_core_size, (uintptr_t)&__itcm_start);
     memcpy(core_itcm_reloc, __itcm_start, itcm_core_size);
     playdate->system->logToConsole("itcm start: %x, end %x: run_frame: %x",
                                    &__itcm_start, &__itcm_end, &gb_run_frame);
@@ -97,7 +98,6 @@ void itcm_core_init(void)
 {
 }
 #endif
-
 
 PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
 {
@@ -152,7 +152,8 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
 
     PGB_GameSceneContext *context = pgb_malloc(sizeof(PGB_GameSceneContext));
     static struct gb_s *gb = NULL;
-    static struct gb_s gb_fallback; // use this gb struct if dtcm alloc not available
+    static struct gb_s
+        gb_fallback;  // use this gb struct if dtcm alloc not available
     if (dtcm_enabled())
     {
         if (gb == NULL || gb == &gb_fallback)
@@ -587,8 +588,7 @@ __core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
     }
 }
 
-__section__(".text.tick")
-__space static void PGB_GameScene_update(void *object)
+__section__(".text.tick") __space static void PGB_GameScene_update(void *object)
 {
     PGB_GameScene *gameScene = object;
     PGB_GameSceneContext *context = gameScene->context;

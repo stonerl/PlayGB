@@ -67,7 +67,7 @@ void *dtcm_alloc(size_t size);
 #define __core                                                        \
     __attribute__((optimize("Os"))) __attribute__((section(".itcm"))) \
     __attribute__((short_call))
-#define __core_section(x)                                             \
+#define __core_section(x)                                                \
     __attribute__((optimize("Os"))) __attribute__((section(".itcm." x))) \
     __attribute__((short_call))
 #else
@@ -83,7 +83,9 @@ void *dtcm_alloc(size_t size);
 #define __shell
 #else
 #ifdef ITCM_CORE
-#define __shell __attribute__((long_call)) __attribute((noinline)) __section__(".text.pgb")
+#define __shell                                                             \
+    __attribute__((long_call)) __attribute((noinline)) __section__(".text." \
+                                                                   "pgb")
 #else
 #define __shell __attribute((noinline)) __section__(".text.pgb")
 #endif

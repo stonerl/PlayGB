@@ -514,8 +514,7 @@ struct gb_s
  * Tick the internal RTC by one second.
  * This was taken from SameBoy, which is released under MIT Licence.
  */
-__section__(".text.pgb")
-void gb_tick_rtc(struct gb_s *gb)
+__section__(".text.pgb") void gb_tick_rtc(struct gb_s *gb)
 {
     /* is timer running? */
     if ((gb->cart_rtc[4] & 0x40) == 0)
@@ -551,8 +550,8 @@ void gb_tick_rtc(struct gb_s *gb)
  * Set initial values in RTC.
  * Should be called after gb_init().
  */
-__section__(".text.pgb")
-void gb_set_rtc(struct gb_s *gb, const struct tm *const time)
+__section__(".text.pgb") void gb_set_rtc(struct gb_s *gb,
+                                         const struct tm *const time)
 {
     gb->cart_rtc[0] = time->tm_sec;
     gb->cart_rtc[1] = time->tm_min;
@@ -561,8 +560,7 @@ void gb_set_rtc(struct gb_s *gb, const struct tm *const time)
     gb->cart_rtc[4] = time->tm_yday >> 8;   /* High 1 bit of day counter. */
 }
 
-__section__(".text.pgb")
-static void __gb_update_tac(struct gb_s *gb)
+__section__(".text.pgb") static void __gb_update_tac(struct gb_s *gb)
 {
     static const uint8_t TAC_CYCLES[4] = {10, 4, 6, 8};
 
@@ -571,8 +569,8 @@ static void __gb_update_tac(struct gb_s *gb)
     gb->gb_reg.tac_cycles = (1 << (int)TAC_CYCLES[gb->gb_reg.tac_rate]) - 1;
 }
 
-__section__(".text.pgb")
-static void __gb_update_selected_bank_addr(struct gb_s *gb)
+__section__(".text.pgb") static void __gb_update_selected_bank_addr(
+    struct gb_s *gb)
 {
     int32_t offset;
     if (gb->mbc == 1 && gb->cart_mode_select)
@@ -1068,7 +1066,8 @@ __shell void __gb_write_full(struct gb_s *gb, const uint_fast16_t addr,
     (gb->gb_error)(gb, GB_INVALID_WRITE, addr);
 }
 
-__core_section("short") static uint8_t __gb_read(struct gb_s *gb, const uint16_t addr)
+__core_section("short") static uint8_t
+    __gb_read(struct gb_s *gb, const uint16_t addr)
 {
     if likely (addr < 0x4000)
     {
@@ -1086,7 +1085,8 @@ __core_section("short") static uint8_t __gb_read(struct gb_s *gb, const uint16_t
     return __gb_read_full(gb, addr);
 }
 
-__core_section("short") static void __gb_write(struct gb_s *gb, const uint16_t addr, uint8_t v)
+__core_section("short") static void __gb_write(struct gb_s *gb,
+                                               const uint16_t addr, uint8_t v)
 {
     if likely (addr >= 0xC000 && addr < 0xE000)
     {
@@ -1096,7 +1096,8 @@ __core_section("short") static void __gb_write(struct gb_s *gb, const uint16_t a
     __gb_write_full(gb, addr, v);
 }
 
-__core_section("short") static uint16_t __gb_read16(struct gb_s *restrict gb, u16 addr)
+__core_section("short") static uint16_t
+    __gb_read16(struct gb_s *restrict gb, u16 addr)
 {
     // TODO: optimize
     u16 v = __gb_read(gb, addr);
@@ -1104,7 +1105,8 @@ __core_section("short") static uint16_t __gb_read16(struct gb_s *restrict gb, u1
     return v;
 }
 
-__core_section("short") static void __gb_write16(struct gb_s *restrict gb, u16 addr, u16 v)
+__core_section("short") static void __gb_write16(struct gb_s *restrict gb,
+                                                 u16 addr, u16 v)
 {
     // TODO: optimize
     __gb_write(gb, addr, v & 0xFF);
@@ -1318,8 +1320,8 @@ struct sprite_data
 };
 
 #if PEANUT_GB_HIGH_LCD_ACCURACY
-__section__(".text.pgb")
-static int compare_sprites(const void *in1, const void *in2)
+__section__(".text.pgb") static int compare_sprites(const void *in1,
+                                                    const void *in2)
 {
     const struct sprite_data *sd1 = in1, *sd2 = in2;
     int x_res = (int)sd1->x - (int)sd2->x;

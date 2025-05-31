@@ -49,9 +49,9 @@ void *pgb_calloc(size_t count, size_t size);
 void pgb_free(void *ptr);
 
 #ifdef TARGET_PLAYDATE
-    #define __section__(x) __attribute__((section(x)))
+#define __section__(x) __attribute__((section(x)))
 #else
-    #define __section__(x)
+#define __section__(x)
 #endif
 
 #define likely(x) (__builtin_expect(!!(x), 1))

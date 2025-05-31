@@ -664,9 +664,8 @@ void audio_init(uint8_t *_audio_mem)
     for (uint8_t lfsr_selector_idx = 0; lfsr_selector_idx < 8;
          ++lfsr_selector_idx)
     {
-        uint32_t current_lfsr_div_val = lfsr_selector_idx == 0
-            ? 8
-            : lfsr_selector_idx*16;
+        uint32_t current_lfsr_div_val =
+            lfsr_selector_idx == 0 ? 8 : lfsr_selector_idx * 16;
         for (uint8_t c_freq_shift_val = 0; c_freq_shift_val < 16;
              ++c_freq_shift_val)
         {
