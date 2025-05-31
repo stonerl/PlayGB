@@ -337,12 +337,6 @@ __audio static void update_wave(int16_t *left, int16_t *right, int len)
         if (c->volume == 0)
             continue;
 
-        {
-            /* First element is unused. */
-            static const int16_t div[] = {INT16_MAX, 1, 2, 4};
-            sample = sample / (div[c->volume]);
-        }
-
         if (c->muted)
             continue;
 
