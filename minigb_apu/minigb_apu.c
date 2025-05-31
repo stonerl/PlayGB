@@ -336,8 +336,8 @@ __audio static void update_wave(int16_t *left, int16_t *right, int len)
 
         sample /= 4;
 
-        left[i] += sample * c->on_left * vol_l;
-        right[i] += sample * c->on_right * vol_r;
+        left[i] = sample * c->on_left * vol_l;
+        right[i] = sample * c->on_right * vol_r;
     }
 }
 
@@ -705,24 +705,38 @@ __audio int audio_callback(void *context, int16_t *left, int16_t *right,
     {
         return 0;
     }
+    
+    __builtin_prefetch(left, 1);
+    __builtin_prefetch(right, 1);
 
     struct chan *c1 = chans;
     struct chan *c2 = chans + 1;
     struct chan *c3 = chans + 2;
     struct chan *c4 = chans + 3;
-
-    update_square(left, right, 0, len);
-    update_square(left, right, 1, len);
-    update_wave(left, right, len);
-    update_noise(left, right, len);
-
-    for (int i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION)
+    
+    // 256, rounded up to replication
+    #define MAX_CHUNK (((256+AUDIO_SAMPLE_REPLICATION-1)/AUDIO_SAMPLE_REPLICATION)*AUDIO_SAMPLE_REPLICATION)
+    while (len > 0)
     {
-        for (int j = i; j < i + AUDIO_SAMPLE_REPLICATION && j < len; ++j)
+        int chunksize = len >= MAX_CHUNK ? MAX_CHUNK : len;
+
+        update_wave(left, right, chunksize);
+        update_square(left, right, 0, chunksize);
+        update_square(left, right, 1, chunksize);
+        update_noise(left, right, chunksize);
+
+        for (int i = 0; i < chunksize; i += AUDIO_SAMPLE_REPLICATION)
         {
-            left[j] = left[i];
-            right[j] = right[i];
+            for (int j = i; j < i + AUDIO_SAMPLE_REPLICATION && j < chunksize; ++j)
+            {
+                left[j] = left[i];
+                right[j] = right[i];
+            }
         }
+        
+        len -= chunksize;
+        left += chunksize;
+        right += chunksize;
     }
 
     return 1;
