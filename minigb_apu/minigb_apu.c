@@ -50,6 +50,7 @@
  * Memory holding audio registers between 0xFF10 and 0xFF3F inclusive.
  */
 static uint8_t *audio_mem = NULL;
+static uint32_t precomputed_noise_freqs[8][16];
 
 struct chan_len_ctr
 {
@@ -359,11 +360,7 @@ __audio static void update_noise(int16_t *left, int16_t *right, int len)
     if (!c->powered)
         return;
     {
-        // TODO: precalculate
-        uint32_t freq;
-        if (c->noise.lfsr_div << c->freq == 0)
-            return;
-        freq = DMG_CLOCK_FREQ_U / (c->noise.lfsr_div << c->freq);
+        uint32_t freq = precomputed_noise_freqs[c->noise.lfsr_div][c->freq];
         set_note_freq(c, freq);
 
         // This prevents a crash, unsure why.
@@ -376,6 +373,9 @@ __audio static void update_noise(int16_t *left, int16_t *right, int len)
 
     len = update_len(c, len);
 
+    if (!c->enabled)
+        return;
+
     for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION)
     {
 
@@ -385,7 +385,9 @@ __audio static void update_noise(int16_t *left, int16_t *right, int len)
         uint32_t prev_pos = 0;
         int32_t sample = 0;
 
-        continue;
+        // Not running the while loop would give us 2-4 fps in Kirby's,
+        // but we also significantly change the sound for it.
+        // continue;
 
         while (update_freq(c, &pos))
         {
@@ -618,7 +620,7 @@ void audio_write(const uint16_t addr, const uint8_t val)
     case 0xFF22:
         chans[3].freq = val >> 4;
         chans[3].noise.lfsr_wide = !(val & 0x08);
-        chans[3].noise.lfsr_div = lfsr_div_lut[val & 0x07];
+        chans[3].noise.lfsr_div = val & 0x07;
         break;
 
     case 0xFF24:
@@ -673,6 +675,30 @@ void audio_init(uint8_t *_audio_mem)
 
         for (uint_fast8_t i = 0; i < sizeof(wave_init); ++i)
             audio_write(0xFF30 + i, wave_init[i]);
+    }
+
+    for (uint8_t lfsr_selector_idx = 0; lfsr_selector_idx < 8;
+         ++lfsr_selector_idx)
+    {
+        uint32_t current_lfsr_div_val = lfsr_div_lut[lfsr_selector_idx];
+        for (uint8_t c_freq_shift_val = 0; c_freq_shift_val < 16;
+             ++c_freq_shift_val)
+        {
+            uint32_t divisor_term = current_lfsr_div_val << c_freq_shift_val;
+
+            if (divisor_term == 0)
+            {
+                // This should ideally not happen with current lfsr_div_lut and
+                // 0-15 shift
+                precomputed_noise_freqs[lfsr_selector_idx][c_freq_shift_val] =
+                    0;
+            }
+            else
+            {
+                precomputed_noise_freqs[lfsr_selector_idx][c_freq_shift_val] =
+                    DMG_CLOCK_FREQ_U / divisor_term;
+            }
+        }
     }
 }
 

@@ -12,7 +12,8 @@
 // increasing AUDIO_SAMPLE_REPLICATION saves processing time,
 // but lowers audio quality. (duplicates, triplicates samples, etc.)
 // does not need to be a power of 2.
-#define AUDIO_SAMPLE_REPLICATION 1
+// 2 seems to be a good middle ground between perf and audio quality.
+#define AUDIO_SAMPLE_REPLICATION 2
 #define AUDIO_SAMPLE_RATE (44100 / AUDIO_SAMPLE_REPLICATION)
 
 #define DMG_CLOCK_FREQ 4194304.0
