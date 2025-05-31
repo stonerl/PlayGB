@@ -42,6 +42,7 @@
 #include <time.h>   /* Required for tm struct */
 
 #include "../src/app.h"
+#include "../src/utility.h"
 #include "version.all" /* Version information */
 
 typedef uint8_t u8;
@@ -49,9 +50,6 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef int8_t s8;
 typedef int16_t s16;
-
-#define likely(x) (__builtin_expect(!!(x), 1))
-#define unlikely(x) (__builtin_expect(!!(x), 0))
 
 /**
  * Sound support must be provided by an external library. When audio_read() and

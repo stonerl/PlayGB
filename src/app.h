@@ -102,10 +102,4 @@ void itcm_core_init(void);
 #define ITCM_CORE_FN(fn) fn
 #endif
 
-#ifdef TARGET_SIMULATOR
-#define clalign
-#else
-#define clalign __attribute__((aligned(32)))
-#endif
-
 #endif /* app_h */

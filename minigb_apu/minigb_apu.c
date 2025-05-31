@@ -35,7 +35,7 @@
 #define MAX_CHAN_VOLUME 15
 
 #ifdef TARGET_SIMULATOR
-#define __audio __attribute__((optimize("O0")))
+#define __audio
 #else
 #define __audio                                                        \
     __attribute__((optimize("Os"))) __attribute__((section(".audio"))) \
@@ -118,8 +118,6 @@ struct chan
 struct chan chans[4];
 
 static int32_t vol_l, vol_r;
-
-static const uint32_t lfsr_div_lut[] = {8, 16, 32, 48, 64, 80, 96, 112};
 
 __audio static void set_note_freq(struct chan *c, const uint32_t freq)
 {
@@ -666,7 +664,9 @@ void audio_init(uint8_t *_audio_mem)
     for (uint8_t lfsr_selector_idx = 0; lfsr_selector_idx < 8;
          ++lfsr_selector_idx)
     {
-        uint32_t current_lfsr_div_val = lfsr_div_lut[lfsr_selector_idx];
+        uint32_t current_lfsr_div_val = lfsr_selector_idx == 0
+            ? 8
+            : lfsr_selector_idx*16;
         for (uint8_t c_freq_shift_val = 0; c_freq_shift_val < 16;
              ++c_freq_shift_val)
         {
@@ -674,7 +674,7 @@ void audio_init(uint8_t *_audio_mem)
 
             if (divisor_term == 0)
             {
-                // This should ideally not happen with current lfsr_div_lut and
+                // This should ideally not happen with current_lfsr_div_val and
                 // 0-15 shift
                 precomputed_noise_freqs[lfsr_selector_idx][c_freq_shift_val] =
                     0;

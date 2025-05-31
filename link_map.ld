@@ -35,7 +35,7 @@ SECTIONS
         __itcm_start = .;
 		*(.itcm.short)
 		. = ALIGN(32);
-		. += 0x6;
+		. += 0xC;
 	    *(.itcm)
 	    *(.itcm.*)
         __itcm_end = .;
@@ -70,6 +70,9 @@ SECTIONS
 		. = ALIGN(32);
 		
 		__rodata_start__ = .;
+		/* separate the audio rodata for stability */
+		build/minigb_apu/*(.rodata*)
+		. = ALIGN(32); . += 0xC;
 		*(.rodata*)
 
 		KEEP(*(.eh_frame*))

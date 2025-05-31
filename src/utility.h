@@ -54,4 +54,13 @@ void pgb_free(void *ptr);
     #define __section__(x)
 #endif
 
+#define likely(x) (__builtin_expect(!!(x), 1))
+#define unlikely(x) (__builtin_expect(!!(x), 0))
+
+#ifdef TARGET_SIMULATOR
+#define clalign
+#else
+#define clalign __attribute__((aligned(32)))
+#endif
+
 #endif /* utility_h */

@@ -13,7 +13,7 @@ const char *PGB_savesPath = "saves";
 const char *PGB_gamesPath = "games";
 
 /* clang-format off */
-const uint8_t PGB_patterns[4][4][4] = {
+const clalign uint8_t PGB_patterns[4][4][4] = {
     {
         {1, 1, 1, 1},
         {1, 1, 1, 1},
