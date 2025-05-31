@@ -385,10 +385,6 @@ __audio static void update_noise(int16_t *left, int16_t *right, int len)
         uint32_t prev_pos = 0;
         int32_t sample = 0;
 
-        // Not running the while loop would give us 2-4 fps in Kirby's,
-        // but we also significantly change the sound for it.
-        // continue;
-
         while (update_freq(c, &pos))
         {
             c->noise.lfsr_reg = (c->noise.lfsr_reg << 1) |
