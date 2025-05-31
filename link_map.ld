@@ -27,18 +27,18 @@ SECTIONS
 		*(.text.*)
 		
 		/* code to copy to TCM, seemingly runs faster */
-		. = ALIGN(32); . += 0x04;
+		. = ALIGN(32); . += 0xC;
         __itcm_start = .;
 	    *(.itcm)
 	    *(.itcm.*)
         __itcm_end = .;
 		
-		. = ALIGN(32); . += 0x0C;
+		. = ALIGN(32);
 		__audio_start__ = .;
 		*(.audio)
 		*(.audio.*)
 		
-		. = ALIGN(32); . += 0x0C;
+		. = ALIGN(32);
 		__rare_start__ = .;
 		*(.rare)
 		*(.rare.*)
