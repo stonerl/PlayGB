@@ -516,6 +516,7 @@ struct gb_s
  * Tick the internal RTC by one second.
  * This was taken from SameBoy, which is released under MIT Licence.
  */
+__section__(".text.pgb")
 void gb_tick_rtc(struct gb_s *gb)
 {
     /* is timer running? */
@@ -552,6 +553,7 @@ void gb_tick_rtc(struct gb_s *gb)
  * Set initial values in RTC.
  * Should be called after gb_init().
  */
+__section__(".text.pgb")
 void gb_set_rtc(struct gb_s *gb, const struct tm *const time)
 {
     gb->cart_rtc[0] = time->tm_sec;
@@ -561,6 +563,7 @@ void gb_set_rtc(struct gb_s *gb, const struct tm *const time)
     gb->cart_rtc[4] = time->tm_yday >> 8;   /* High 1 bit of day counter. */
 }
 
+__section__(".text.pgb")
 static void __gb_update_tac(struct gb_s *gb)
 {
     static const uint8_t TAC_CYCLES[4] = {10, 4, 6, 8};
@@ -570,6 +573,7 @@ static void __gb_update_tac(struct gb_s *gb)
     gb->gb_reg.tac_cycles = (1 << (int)TAC_CYCLES[gb->gb_reg.tac_rate]) - 1;
 }
 
+__section__(".text.pgb")
 static void __gb_update_selected_bank_addr(struct gb_s *gb)
 {
     int32_t offset;
@@ -1316,6 +1320,7 @@ struct sprite_data
 };
 
 #if PEANUT_GB_HIGH_LCD_ACCURACY
+__section__(".text.pgb")
 static int compare_sprites(const void *in1, const void *in2)
 {
     const struct sprite_data *sd1 = in1, *sd2 = in2;

@@ -21,6 +21,9 @@ SECTIONS
 		
 		. = ALIGN(32);
 		*(.text.tick)
+		
+		. = ALIGN(32);
+		*(.text.pgb)
 
 		. = ALIGN(32);
 		*(.text)
