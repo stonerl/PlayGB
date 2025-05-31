@@ -1096,7 +1096,7 @@ __core_section("short") static void __gb_write(struct gb_s *gb, const uint16_t a
     __gb_write_full(gb, addr, v);
 }
 
-__core static uint16_t __gb_read16(struct gb_s *restrict gb, u16 addr)
+__core_section("short") static uint16_t __gb_read16(struct gb_s *restrict gb, u16 addr)
 {
     // TODO: optimize
     u16 v = __gb_read(gb, addr);
