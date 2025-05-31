@@ -1332,7 +1332,7 @@ __section__(".text.pgb") static int compare_sprites(const void *in1,
 }
 #endif
 
-__core static void __gb_draw_pixel(uint8_t *line, u8 x, u8 v)
+__core_section("draw") static void __gb_draw_pixel(uint8_t *line, u8 x, u8 v)
 {
     u8 *pix = line + x / LCD_PACKING;
     x = (x % LCD_PACKING) * (8 / LCD_PACKING);
@@ -1340,7 +1340,7 @@ __core static void __gb_draw_pixel(uint8_t *line, u8 x, u8 v)
     *pix |= v << x;
 }
 
-__core static u8 __gb_get_pixel(uint8_t *line, u8 x)
+__core_section("draw") static u8 __gb_get_pixel(uint8_t *line, u8 x)
 {
     u8 *pix = line + x / LCD_PACKING;
     x = (x % LCD_PACKING) * LCD_BITS_PER_PIXEL;
@@ -1348,7 +1348,7 @@ __core static u8 __gb_get_pixel(uint8_t *line, u8 x)
 }
 
 // renders one scanline
-__core void __gb_draw_line(struct gb_s *gb)
+__core_section("draw") void __gb_draw_line(struct gb_s *gb)
 {
     uint8_t *pixels = &gb->lcd[gb->gb_reg.LY * LCD_WIDTH_PACKED];
 
@@ -3915,7 +3915,7 @@ exit:
     return inst_cycles;
 }
 
-__core static bool __gb_get_op_flag(struct gb_s *restrict gb, uint8_t op8)
+__core_section("short") static bool __gb_get_op_flag(struct gb_s *restrict gb, uint8_t op8)
 {
     op8 %= 4;
     bool flag = (op8 <= 1) ? gb->cpu_reg.f_bits.z : gb->cpu_reg.f_bits.c;
@@ -3923,7 +3923,7 @@ __core static bool __gb_get_op_flag(struct gb_s *restrict gb, uint8_t op8)
     return flag;
 }
 
-__core static u16 __gb_add16(struct gb_s *restrict gb, u16 a, u16 b)
+__core_section("short") static u16 __gb_add16(struct gb_s *restrict gb, u16 a, u16 b)
 {
     unsigned temp = a + b;
     gb->cpu_reg.f_bits.n = 0;

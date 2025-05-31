@@ -31,12 +31,14 @@ SECTIONS
 		
 		/* code to copy to TCM, seemingly runs faster */
 		. = ALIGN(32);
-		. += 0xc;
         __itcm_start = .;
 		*(.itcm.short)
+		*(.itcm.draw)
+		*(.itcm)
+		. = ALIGN(32); . += 0x6;
+		*(.itcm.cb)
 		. = ALIGN(32);
-		. += 0xC;
-	    *(.itcm)
+		*(.itcm.micro)
 	    *(.itcm.*)
         __itcm_end = .;
 		
