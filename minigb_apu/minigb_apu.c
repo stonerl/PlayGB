@@ -245,40 +245,42 @@ __audio static void update_square(int16_t *left, int16_t *right, const bool ch2,
     if (!c->powered || !c->enabled)
         return;
 
-    uint32_t gb_freq = DMG_CLOCK_FREQ_U / ((2048 - c->freq) << 5);
-    set_note_freq(c, gb_freq);
+    uint32_t freq = DMG_CLOCK_FREQ_U / ((2048 - c->freq) << 5);
+    set_note_freq(c, freq);
     c->freq_inc *= 8;
 
-    static const int_fast16_t SQUARE_CHAN_HIGH_VAL =
-        VOL_INIT_MAX / MAX_CHAN_VOLUME;
-    static const int_fast16_t SQUARE_CHAN_LOW_VAL =
-        VOL_INIT_MIN / MAX_CHAN_VOLUME;
+    len = update_len(c, len);
 
     for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION)
     {
-        if (!c->enabled)
-            break;
+
+        update_env(c);
+        if (!ch2)
+            update_sweep(c);
 
         uint32_t pos = 0;
-        int32_t sample_val;
+        uint32_t prev_pos = 0;
+        int32_t sample = 0;
 
         while (update_freq(c, &pos))
         {
             c->square.duty_counter = (c->square.duty_counter + 1) & 7;
+            sample += ((pos - prev_pos) / c->freq_inc) * c->val;
             c->val = (c->square.duty & (1 << c->square.duty_counter))
-                         ? SQUARE_CHAN_HIGH_VAL
-                         : SQUARE_CHAN_LOW_VAL;
+                         ? VOL_INIT_MAX / MAX_CHAN_VOLUME
+                         : VOL_INIT_MIN / MAX_CHAN_VOLUME;
+            prev_pos = pos;
         }
-        sample_val = c->val;  // Simplified: take last state
 
         if (c->muted)
             continue;
 
-        sample_val *= c->volume;
-        sample_val /= 4;
+        sample += c->val;
+        sample *= c->volume;
+        sample /= 4;
 
-        left[i] += sample_val * c->on_left * vol_l;
-        right[i] += sample_val * c->on_right * vol_r;
+        left[i] += sample * c->on_left * vol_l;
+        right[i] += sample * c->on_right * vol_r;
     }
 }
 
@@ -312,28 +314,33 @@ __audio static void update_wave(int16_t *left, int16_t *right, int len)
 
     len = update_len(c, len);
 
-    static const int_fast32_t WAVE_SAMPLE_SCALER = INT16_MAX / 64;
-
     for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION)
     {
+
         uint32_t pos = 0;
+        uint32_t prev_pos = 0;
+        int32_t sample = 0;
+
         c->wave.sample = wave_sample(c->val, c->volume);
 
         while (update_freq(c, &pos))
         {
             c->val = (c->val + 1) & 31;
+            sample += ((pos - prev_pos) / c->freq_inc) *
+                      ((int)c->wave.sample - 8) * (INT16_MAX / 64);
             c->wave.sample = wave_sample(c->val, c->volume);
+            prev_pos = pos;
         }
 
-        int32_t sample = ((int)c->wave.sample - 8) * WAVE_SAMPLE_SCALER;
+        sample += ((int)c->wave.sample - 8) * (int)(INT16_MAX / 64);
 
         if (c->volume == 0)
-        {
-            sample = 0;
-        }
-        if (c->volume == 0)
-        {
             continue;
+
+        {
+            /* First element is unused. */
+            static const int16_t div[] = {INT16_MAX, 1, 2, 4};
+            sample = sample / (div[c->volume]);
         }
 
         if (c->muted)
@@ -352,60 +359,69 @@ __audio static void update_noise(int16_t *left, int16_t *right, int len)
 
     if (!c->powered)
         return;
+    {
+        uint32_t freq = precomputed_noise_freqs[c->noise.lfsr_div][c->freq];
+        set_note_freq(c, freq);
 
-    uint32_t freq_val = precomputed_noise_freqs[c->noise.lfsr_div][c->freq];
-    set_note_freq(c, freq_val);
-
-    // This prevents a crash, unsure why.
-    if (c->freq_inc < 1000)
-        return;
+        // This prevents a crash, unsure why.
+        if (c->freq_inc < 1000)
+            return;
+    }
 
     if (c->freq >= 14)
         c->enabled = 0;
 
     len = update_len(c, len);
+
     if (!c->enabled)
         return;
 
-    static const int_fast16_t NOISE_LFSR_HIGH_VAL =
-        VOL_INIT_MAX / MAX_CHAN_VOLUME;
-    static const int_fast16_t NOISE_LFSR_LOW_VAL =
-        VOL_INIT_MIN / MAX_CHAN_VOLUME;
-
     for (uint_fast16_t i = 0; i < len; i += AUDIO_SAMPLE_REPLICATION)
     {
+
         update_env(c);
 
         uint32_t pos = 0;
+        uint32_t prev_pos = 0;
+        int32_t sample = 0;
+
+        // Not running the while loop would give us 2-4 fps in Kirby's,
+        // but we also significantly change the sound for it.
+        // continue;
 
         while (update_freq(c, &pos))
         {
-            uint16_t lfsr = c->noise.lfsr_reg;
-            int xor_result = (lfsr & 1) ^ ((lfsr >> 1) & 1);
+            c->noise.lfsr_reg = (c->noise.lfsr_reg << 1) |
+                                (c->val >= VOL_INIT_MAX / MAX_CHAN_VOLUME);
 
-            lfsr >>= 1;
             if (c->noise.lfsr_wide)
             {
-                lfsr = (lfsr & ~0x40) | (xor_result << 6);
+                c->val = !(((c->noise.lfsr_reg >> 14) & 1) ^
+                           ((c->noise.lfsr_reg >> 13) & 1))
+                             ? VOL_INIT_MAX / MAX_CHAN_VOLUME
+                             : VOL_INIT_MIN / MAX_CHAN_VOLUME;
             }
             else
             {
-                lfsr = (lfsr & ~0x4000) | (xor_result << 14);
+                c->val = !(((c->noise.lfsr_reg >> 6) & 1) ^
+                           ((c->noise.lfsr_reg >> 5) & 1))
+                             ? VOL_INIT_MAX / MAX_CHAN_VOLUME
+                             : VOL_INIT_MIN / MAX_CHAN_VOLUME;
             }
-            c->noise.lfsr_reg = lfsr;
-            c->val = (lfsr & 1) ? NOISE_LFSR_LOW_VAL : NOISE_LFSR_HIGH_VAL;
-        }
 
-        int_fast16_t final_sample_val = c->val;
+            sample += ((pos - prev_pos) / c->freq_inc) * c->val;
+            prev_pos = pos;
+        }
 
         if (c->muted)
             continue;
 
-        final_sample_val *= c->volume;
-        final_sample_val /= 4;
+        sample += c->val;
+        sample *= c->volume;
+        sample /= 4;
 
-        left[i] += final_sample_val * c->on_left * vol_l;
-        right[i] += final_sample_val * c->on_right * vol_r;
+        left[i] += sample * c->on_left * vol_l;
+        right[i] += sample * c->on_right * vol_r;
     }
 }
 
