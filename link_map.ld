@@ -16,9 +16,15 @@ SECTIONS
 	.text :
 	{        	
 		__text_start__ = .;
+		. = ALIGN(32);
+		*(.text.main)
+		
+		. = ALIGN(32);
+		*(.text.tick)
+
+		. = ALIGN(32);
 		*(.text)
 		*(.text.*)
-		
 		
 		/* code to copy to TCM, seemingly runs faster */
 		. = ALIGN(32); . += 0x04;
@@ -27,10 +33,12 @@ SECTIONS
 	    *(.itcm.*)
         __itcm_end = .;
 		
+		. = ALIGN(32); . += 0x0C;
 		__audio_start__ = .;
 		*(.audio)
 		*(.audio.*)
 		
+		. = ALIGN(32); . += 0x0C;
 		__rare_start__ = .;
 		*(.rare)
 		*(.rare.*)
@@ -52,6 +60,8 @@ SECTIONS
  		*(SORT(.dtors.*))
  		*(.dtors)
 		
+		. = ALIGN(32); . += 0x04;
+		
 		__rodata_start__ = .;
 		*(.rodata*)
 
@@ -61,6 +71,8 @@ SECTIONS
 	.data :
 	{
 		__etext = .;
+		
+		. = ALIGN(32); . += 0x18;
 
 		__data_start__ = .;
 		*(vtable)
@@ -94,14 +106,13 @@ SECTIONS
 
 	.bss :
 	{
-		. = ALIGN(4);
+		. = ALIGN(32); . += 0x04;
 		__bss_start__ = .;
 		*(.bss*)
 		*(COMMON)
 		*(COM)
 		. = ALIGN(4);
 		__bss_end__ = .;
-
 	}
 
   /DISCARD/ :

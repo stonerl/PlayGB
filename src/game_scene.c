@@ -587,7 +587,7 @@ __core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
     }
 }
 
-__section__(".rare")
+__section__(".text.tick")
 __space static void PGB_GameScene_update(void *object)
 {
     PGB_GameScene *gameScene = object;
