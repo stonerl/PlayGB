@@ -13,11 +13,11 @@
 #include "dtcm.h"
 #include "preferences.h"
 #include "revcheck.h"
+#include "utility.h"
 
 static const float TARGET_TIME_PER_GB_FRAME_MS = 1000.0f / 59.73f;
 static uint8_t MAX_CONSECUTIVE_DRAW_SKIPS = 0;
 static const uint8_t ADJUSTMENT_PERIOD_FRAMES = 60;
-#include "utility.h"
 
 PGB_GameScene *audioGameScene = NULL;
 
@@ -60,6 +60,21 @@ static void gb_error(struct gb_s *gb, const enum gb_error_e gb_err,
 
 static const char *startButtonText = "start";
 static const char *selectButtonText = "select";
+
+
+static const uint8_t PGB_dither_lut_c0[4] = {
+    (0x1F >> (2 * 0)) & 3,  // GB Color 0 -> 0b11 (3)
+    (0x1F >> (2 * 1)) & 3,  // GB Color 1 -> 0b11 (3)
+    (0x1F >> (2 * 2)) & 3,  // GB Color 2 -> 0b01 (1)
+    (0x1F >> (2 * 3)) & 3   // GB Color 3 -> 0b00 (0)
+};
+
+static const uint8_t PGB_dither_lut_c1[4] = {
+    (0x0B >> (2 * 0)) & 3,  // GB Color 0 -> 0b11 (3)
+    (0x0B >> (2 * 1)) & 3,  // GB Color 1 -> 0b10 (2)
+    (0x0B >> (2 * 2)) & 3,  // GB Color 2 -> 0b00 (0)
+    (0x0B >> (2 * 3)) & 3   // GB Color 3 -> 0b00 (0)
+};
 
 static uint8_t PGB_bitmask[4][4][4];
 static bool PGB_GameScene_bitmask_done = false;
@@ -513,7 +528,7 @@ __core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
                                   markUpdateRows_t markUpdateRows)
 {
     framebuffer += (PGB_LCD_X / 8);
-    const u32 dither = 0b00011111 | (0b00001011 << 8);
+    // const u32 dither = 0b00011111 | (0b00001011 << 8);
     int scale_index = 0;
     unsigned fb_y_playdate_current_bottom =
         PGB_LCD_Y + PGB_LCD_HEIGHT;  // Bottom of drawable area on Playdate
@@ -551,15 +566,15 @@ __core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
         for (int x_packed_gb = LCD_WIDTH_PACKED; x_packed_gb-- > 0;)
         {
             uint8_t orgpixels = gb_line_data[x_packed_gb];
-            uint8_t pixels = orgpixels;
+            uint8_t pixels_temp_c0 = orgpixels;
             unsigned p = 0;
 
             for (int i = 0; i < 4; ++i)
             {  // Unpack 4 GB pixels from the byte
                 p <<= 2;
-                unsigned c0 = (dither >> (2 * (pixels & 3))) & 3;
+                unsigned c0 = PGB_dither_lut_c0[pixels_temp_c0 & 3];
                 p |= c0;
-                pixels >>= 2;
+                pixels_temp_c0 >>= 2;
             }
 
             u8 *restrict pd_fb_target_byte0 = pd_fb_line_top_ptr + x_packed_gb;
@@ -567,7 +582,8 @@ __core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
 
             if (row_height_on_playdate == 2)
             {
-                pixels = orgpixels;  // Reset for second dither pattern
+                uint8_t pixels_temp_c1 =
+                    orgpixels;  // Reset for second dither pattern
                 u8 *restrict pd_fb_target_byte1 =
                     pd_fb_target_byte0 +
                     PLAYDATE_ROW_STRIDE;  // Next Playdate row
@@ -575,10 +591,9 @@ __core void update_fb_dirty_lines(uint8_t *restrict framebuffer,
                 for (int i = 0; i < 4; ++i)
                 {
                     p <<= 2;
-                    unsigned c1 = (dither >> (2 * (pixels & 3) + 8)) &
-                                  3;  // Use second part of dither
+                    unsigned c1 = PGB_dither_lut_c1[pixels_temp_c1 & 3];
                     p |= c1;
-                    pixels >>= 2;
+                    pixels_temp_c1 >>= 2;
                 }
                 *pd_fb_target_byte1 = p & 0xFF;
             }
