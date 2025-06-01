@@ -11,8 +11,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "utility.h"
-
 typedef struct
 {
     unsigned int length;

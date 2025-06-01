@@ -7,6 +7,8 @@
 
 #include "array.h"
 
+#include "utility.h"
+
 PGB_Array *array_new(void)
 {
     PGB_Array *array = pgb_malloc(sizeof(PGB_Array));

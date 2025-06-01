@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "array.h"
 #include "pd_api.h"
 
 extern PlaydateAPI *playdate;
@@ -40,6 +41,9 @@ char *pgb_extract_fs_error_code(const char *filename);
 
 float pgb_easeInOutQuad(float x);
 
+int pgb_compare_games_by_display_name(const void *a, const void *b);
+
+void pgb_sort_games_array(PGB_Array *games_array);
 void pgb_fillRoundRect(PDRect rect, int radius, LCDColor color);
 void pgb_drawRoundRect(PDRect rect, int radius, int lineWidth, LCDColor color);
 
@@ -47,6 +51,10 @@ void *pgb_malloc(size_t size);
 void *pgb_realloc(void *ptr, size_t size);
 void *pgb_calloc(size_t count, size_t size);
 void pgb_free(void *ptr);
+
+size_t pgb_strlen(const char *s);
+char *pgb_strrchr(const char *s, int c);
+int pgb_strcmp(const char *s1, const char *s2);
 
 #ifdef TARGET_PLAYDATE
 #define __section__(x) __attribute__((section(x)))

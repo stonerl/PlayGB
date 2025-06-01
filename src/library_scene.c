@@ -7,9 +7,6 @@
 
 #include "library_scene.h"
 
-#include <stdlib.h>
-#include <string.h>
-
 #include "app.h"
 #include "game_scene.h"
 #include "preferences.h"
@@ -54,7 +51,7 @@ static void PGB_LibraryScene_listFiles(const char *filename, void *userdata)
     PGB_LibraryScene *libraryScene = userdata;
 
     char *extension;
-    char *dot = strrchr(filename, '.');
+    char *dot = pgb_strrchr(filename, '.');
 
     if (!dot || dot == filename)
     {
@@ -65,19 +62,11 @@ static void PGB_LibraryScene_listFiles(const char *filename, void *userdata)
         extension = dot + 1;
     }
 
-    if ((strcmp(extension, "gb") == 0 || strcmp(extension, "gbc") == 0))
+    if ((pgb_strcmp(extension, "gb") == 0 || pgb_strcmp(extension, "gbc") == 0))
     {
         PGB_Game *game = PGB_Game_new(filename);
         array_push(libraryScene->games, game);
     }
-}
-
-static int compareGamesByDisplayName(const void *a, const void *b)
-{
-    PGB_Game *gameA = *(PGB_Game **)a;
-    PGB_Game *gameB = *(PGB_Game **)b;
-
-    return strcmp(gameA->displayName, gameB->displayName);
 }
 
 static void PGB_LibraryScene_reloadList(PGB_LibraryScene *libraryScene)
@@ -93,12 +82,7 @@ static void PGB_LibraryScene_reloadList(PGB_LibraryScene *libraryScene)
     playdate->file->listfiles(PGB_gamesPath, PGB_LibraryScene_listFiles,
                               libraryScene, 0);
 
-    if (libraryScene->games->length > 1)
-    {
-        qsort(libraryScene->games->items, libraryScene->games->length,
-              sizeof(PGB_Game *),  // The array stores pointers to PGB_Game
-              compareGamesByDisplayName);
-    }
+    pgb_sort_games_array(libraryScene->games);
 
     PGB_Array *items = libraryScene->listView->items;
 
@@ -303,14 +287,14 @@ static void PGB_LibraryScene_update(void *object)
                             const char *message = "Invalid image";
                             playdate->graphics->setFont(PGB_App->bodyFont);
                             int textWidth = playdate->graphics->getTextWidth(
-                                PGB_App->bodyFont, message, strlen(message),
+                                PGB_App->bodyFont, message, pgb_strlen(message),
                                 kUTF8Encoding, 0);
                             int textX = leftPanelWidth +
                                         (rightPanelWidth - textWidth) / 2;
                             int textY = screenHeight / 2;
 
                             playdate->graphics->drawText(
-                                message, strlen(message), kUTF8Encoding, textX,
+                                message, pgb_strlen(message), kUTF8Encoding, textX,
                                 textY);
                         }
 
@@ -321,15 +305,15 @@ static void PGB_LibraryScene_update(void *object)
                         const char *message = "Error loading image";
                         playdate->graphics->setFont(PGB_App->bodyFont);
                         int textWidth = playdate->graphics->getTextWidth(
-                            PGB_App->bodyFont, message, strlen(message),
+                            PGB_App->bodyFont, message, pgb_strlen(message),
                             kUTF8Encoding, 0);
                         int textX =
                             leftPanelWidth + (rightPanelWidth - textWidth) / 2;
                         int textY = screenHeight / 2;
 
-                        playdate->graphics->drawText(message, strlen(message),
-                                                     kUTF8Encoding, textX,
-                                                     textY);
+                        playdate->graphics->drawText(
+                            message, pgb_strlen(message), kUTF8Encoding, textX,
+                            textY);
                     }
                 }
                 else
@@ -341,13 +325,13 @@ static void PGB_LibraryScene_update(void *object)
                     const char *message = "Missing cover";
                     playdate->graphics->setFont(PGB_App->bodyFont);
                     int textWidth = playdate->graphics->getTextWidth(
-                        PGB_App->bodyFont, message, strlen(message),
+                        PGB_App->bodyFont, message, pgb_strlen(message),
                         kUTF8Encoding, 0);
                     int textX =
                         leftPanelWidth + (rightPanelWidth - textWidth) / 2;
                     int textY = screenHeight / 2;
 
-                    playdate->graphics->drawText(message, strlen(message),
+                    playdate->graphics->drawText(message, pgb_strlen(message),
                                                  kUTF8Encoding, textX, textY);
                 }
 
@@ -381,31 +365,33 @@ static void PGB_LibraryScene_update(void *object)
 
             int titleX = (float)(playdate->display->getWidth() -
                                  playdate->graphics->getTextWidth(
-                                     PGB_App->titleFont, title, strlen(title),
-                                     kUTF8Encoding, 0)) /
+                                     PGB_App->titleFont, title,
+                                     pgb_strlen(title), kUTF8Encoding, 0)) /
                          2;
-            int message1_X = (float)(playdate->display->getWidth() -
-                                     playdate->graphics->getTextWidth(
-                                         PGB_App->bodyFont, message1,
-                                         strlen(message1), kUTF8Encoding, 0)) /
-                             2;
-            int message2_X = (float)(playdate->display->getWidth() -
-                                     playdate->graphics->getTextWidth(
-                                         PGB_App->bodyFont, message2,
-                                         strlen(message2), kUTF8Encoding, 0)) /
-                             2;
+            int message1_X =
+                (float)(playdate->display->getWidth() -
+                        playdate->graphics->getTextWidth(
+                            PGB_App->bodyFont, message1, pgb_strlen(message1),
+                            kUTF8Encoding, 0)) /
+                2;
+            int message2_X =
+                (float)(playdate->display->getWidth() -
+                        playdate->graphics->getTextWidth(
+                            PGB_App->bodyFont, message2, pgb_strlen(message2),
+                            kUTF8Encoding, 0)) /
+                2;
 
             int message1_Y = titleY + titleHeight + titleToMessageSpacing;
             int message2_Y = message1_Y + messageHeight + messageLineSpacing;
 
             playdate->graphics->setFont(PGB_App->titleFont);
-            playdate->graphics->drawText(title, strlen(title), kUTF8Encoding,
-                                         titleX, titleY);
+            playdate->graphics->drawText(title, pgb_strlen(title),
+                                         kUTF8Encoding, titleX, titleY);
 
             playdate->graphics->setFont(PGB_App->bodyFont);
-            playdate->graphics->drawText(message1, strlen(message1),
+            playdate->graphics->drawText(message1, pgb_strlen(message1),
                                          kUTF8Encoding, message1_X, message1_Y);
-            playdate->graphics->drawText(message2, strlen(message2),
+            playdate->graphics->drawText(message2, pgb_strlen(message2),
                                          kUTF8Encoding, message2_X, message2_Y);
         }
     }
@@ -480,7 +466,7 @@ PGB_Game *PGB_Game_new(const char *filename)
     game->fullpath = fullpath;
 
     char *basename = string_copy(filename);
-    char *ext = strrchr(basename, '.');
+    char *ext = pgb_strrchr(basename, '.');
     if (ext != NULL)
     {
         *ext = '\0';

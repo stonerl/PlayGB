@@ -7,6 +7,11 @@
 
 #include "utility.h"
 
+#include <stdlib.h>
+#include <string.h>
+
+#include "library_scene.h"
+
 PlaydateAPI *playdate;
 
 const char *PGB_savesPath = "saves";
@@ -46,6 +51,21 @@ char *string_copy(const char *string)
     char *copied = pgb_malloc(strlen(string) + 1);
     strcpy(copied, string);
     return copied;
+}
+
+size_t pgb_strlen(const char *s)
+{
+    return strlen(s);
+}
+
+char *pgb_strrchr(const char *s, int c)
+{
+    return strrchr(s, c);
+}
+
+int pgb_strcmp(const char *s1, const char *s2)
+{
+    return strcmp(s1, s2);
 }
 
 char *pgb_save_filename(const char *path, bool isRecovery)
@@ -108,6 +128,23 @@ char *pgb_extract_fs_error_code(const char *fileError)
 float pgb_easeInOutQuad(float x)
 {
     return (x < 0.5f) ? 2 * x * x : 1 - powf(-2 * x + 2, 2) * 0.5f;
+}
+
+int pgb_compare_games_by_display_name(const void *a, const void *b)
+{
+    PGB_Game *gameA = *(PGB_Game **)a;
+    PGB_Game *gameB = *(PGB_Game **)b;
+
+    return strcmp(gameA->displayName, gameB->displayName);
+}
+
+void pgb_sort_games_array(PGB_Array *games_array)
+{
+    if (games_array != NULL && games_array->length > 1)
+    {
+        qsort(games_array->items, games_array->length, sizeof(PGB_Game *),
+              pgb_compare_games_by_display_name);
+    }
 }
 
 void pgb_fillRoundRect(PDRect rect, int radius, LCDColor color)
