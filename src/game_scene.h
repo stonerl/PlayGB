@@ -68,10 +68,10 @@ typedef struct PGB_GameScene
     char *save_filename;
     char *rom_filename;
 
-    bool needsDisplay;
     bool audioEnabled;
     bool audioLocked;
     bool cartridge_has_rtc;
+    bool staticSelectorUIDrawn;
 
     unsigned int rtc_time;
     uint16_t rtc_seconds_to_catch_up;

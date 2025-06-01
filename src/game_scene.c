@@ -129,10 +129,10 @@ PGB_GameScene *PGB_GameScene_new(const char *rom_filename)
                              .selectorIndex = 0,
                              .empty = true};
 
-    gameScene->needsDisplay = false;
-
     gameScene->audioEnabled = preferences_sound_enabled;
     gameScene->audioLocked = false;
+
+    gameScene->staticSelectorUIDrawn = false;
 
     PGB_GameScene_generateBitmask();
 
@@ -665,27 +665,24 @@ __section__(".text.tick") __space static void PGB_GameScene_update(void *object)
 
     gameScene->selector.index = selectorIndex;
 
-    bool needsDisplay = false;
-
-    if (gameScene->model.empty || gameScene->needsDisplay ||
-        gameScene->model.state != gameScene->state ||
+    bool gbScreenRequiresFullRefresh = false;
+    if (gameScene->model.empty || gameScene->model.state != gameScene->state ||
         gameScene->model.error != gameScene->error)
     {
-        needsDisplay = true;
+        gbScreenRequiresFullRefresh = true;
     }
 
-    bool needsDisplaySelector = false;
-    if (needsDisplay ||
+    bool animatedSelectorBitmapNeedsRedraw = false;
+    if (gbScreenRequiresFullRefresh || !gameScene->staticSelectorUIDrawn ||
         gameScene->model.selectorIndex != gameScene->selector.index)
     {
-        needsDisplaySelector = true;
+        animatedSelectorBitmapNeedsRedraw = true;
     }
 
     gameScene->model.empty = false;
     gameScene->model.state = gameScene->state;
     gameScene->model.error = gameScene->error;
     gameScene->model.selectorIndex = gameScene->selector.index;
-    gameScene->needsDisplay = false;
 
     if (gameScene->state == PGB_GameSceneStateLoaded)
     {
@@ -706,7 +703,7 @@ __section__(".text.tick") __space static void PGB_GameScene_update(void *object)
         context->gb->direct.joypad_bits.right = !(current & kButtonRight);
         context->gb->direct.joypad_bits.down = !(current & kButtonDown);
 
-        if (needsDisplay)
+        if (gbScreenRequiresFullRefresh)
         {
             playdate->graphics->clear(kColorBlack);
         }
@@ -777,11 +774,11 @@ __section__(".text.tick") __space static void PGB_GameScene_update(void *object)
             // forced display
             bool actual_gb_draw_needed =
                 context->gb->lcd_master_enable &&
-                (any_line_changed_this_frame || needsDisplay);
+                (any_line_changed_this_frame || gbScreenRequiresFullRefresh);
 
             if (actual_gb_draw_needed)
             {
-                if (needsDisplay)
+                if (gbScreenRequiresFullRefresh)
                 {
                     for (int i = 0; i < LCD_HEIGHT; i++)
                     {
@@ -978,40 +975,43 @@ __section__(".text.tick") __space static void PGB_GameScene_update(void *object)
             }
         }
 
-        if (needsDisplay)
+        if (!gameScene->staticSelectorUIDrawn || gbScreenRequiresFullRefresh)
         {
             playdate->graphics->setFont(PGB_App->labelFont);
             playdate->graphics->setDrawMode(kDrawModeFillWhite);
-
-            playdate->graphics->drawText(startButtonText,
-                                         strlen(startButtonText), kUTF8Encoding,
-                                         gameScene->selector.startButtonX,
-                                         gameScene->selector.startButtonY);
             playdate->graphics->drawText(
-                selectButtonText, strlen(selectButtonText), kUTF8Encoding,
+                startButtonText, pgb_strlen(startButtonText), kUTF8Encoding,
+                gameScene->selector.startButtonX,
+                gameScene->selector.startButtonY);
+            playdate->graphics->drawText(
+                selectButtonText, pgb_strlen(selectButtonText), kUTF8Encoding,
                 gameScene->selector.selectButtonX,
                 gameScene->selector.selectButtonY);
-
             playdate->graphics->setDrawMode(kDrawModeCopy);
         }
 
-        if (needsDisplaySelector)
+        if (animatedSelectorBitmapNeedsRedraw)
         {
             LCDBitmap *bitmap;
-
-            if (selectorIndex < 0)
+            // Use gameScene->selector.index, which is the most current
+            // calculated frame
+            if (gameScene->selector.index < 0)
             {
                 bitmap = PGB_App->startSelectBitmap;
             }
             else
             {
                 bitmap = playdate->graphics->getTableBitmap(
-                    PGB_App->selectorBitmapTable, selectorIndex);
+                    PGB_App->selectorBitmapTable, gameScene->selector.index);
             }
-
             playdate->graphics->drawBitmap(bitmap, gameScene->selector.x,
                                            gameScene->selector.y,
                                            kBitmapUnflipped);
+        }
+
+        if (!gameScene->staticSelectorUIDrawn || gbScreenRequiresFullRefresh)
+        {
+            gameScene->staticSelectorUIDrawn = true;
         }
 
 #if PGB_DEBUG && PGB_DEBUG_UPDATED_ROWS
@@ -1043,7 +1043,7 @@ __section__(".text.tick") __space static void PGB_GameScene_update(void *object)
         gameScene->scene->preferredRefreshRate = 30;
         gameScene->scene->refreshRateCompensation = 0;
 
-        if (needsDisplay)
+        if (gbScreenRequiresFullRefresh)
         {
             char *errorTitle = "Oh no!";
 
@@ -1113,6 +1113,8 @@ __section__(".text.tick") __space static void PGB_GameScene_update(void *object)
 
                 messageY += messageHeight + lineSpacing;
             }
+
+            gameScene->staticSelectorUIDrawn = false;
         }
     }
 }
