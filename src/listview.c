@@ -317,44 +317,63 @@ void PGB_ListView_update(PGB_ListView *listView)
             {
                 listView->textScrollTime += PGB_App->dt;
 
-                float scrollPeriod = 3.0f;
-                float pauseDuration = 1.0f;
-                float maxOffset = textWidth - availableWidth;
+                float pauseAtStartDuration = 3.0f;
+                float scrollToEndDuration = 3.0f;
+                float pauseAtEndDuration = 2.0f;
+                float scrollToStartDuration = 2.0f;
 
-                if (listView->textScrollPause > 0)
+                float maxOffset = textWidth - availableWidth - 10;
+
+                if (maxOffset <= 0)
                 {
-                    listView->textScrollPause -= PGB_App->dt;
+                    button->textScrollOffset = 0.0f;
                 }
                 else
                 {
-                    float normalizedTime =
-                        fmodf(listView->textScrollTime, scrollPeriod) /
-                        scrollPeriod;
+                    float totalCycleDuration =
+                        pauseAtStartDuration + scrollToEndDuration +
+                        pauseAtEndDuration + scrollToStartDuration;
 
-                    if (normalizedTime < 0.5f)
+                    float currentTimeInCycle =
+                        fmodf(listView->textScrollTime, totalCycleDuration);
+
+                    if (currentTimeInCycle < pauseAtStartDuration)
                     {
-                        float t = normalizedTime * 2.0f;
-                        button->textScrollOffset =
-                            pgb_easeInOutQuad(t) * maxOffset;
+                        button->textScrollOffset = 0.0f;
+                    }
+                    else if (currentTimeInCycle <
+                             (pauseAtStartDuration + scrollToEndDuration))
+                    {
+                        float timeIntoScrollToEnd =
+                            currentTimeInCycle - pauseAtStartDuration;
+                        float normalizedScrollProgress =
+                            timeIntoScrollToEnd / scrollToEndDuration;
 
-                        if (normalizedTime > 0.49f)
-                        {
-                            listView->textScrollPause = pauseDuration;
-                        }
+                        button->textScrollOffset =
+                            pgb_easeInOutQuad(normalizedScrollProgress) *
+                            maxOffset;
+                    }
+                    else if (currentTimeInCycle <
+                             (pauseAtStartDuration + scrollToEndDuration +
+                              pauseAtEndDuration))
+                    {
+                        button->textScrollOffset = maxOffset;
                     }
                     else
                     {
-                        float t = (normalizedTime - 0.5f) * 2.0f;
-                        button->textScrollOffset =
-                            (1.0f - pgb_easeInOutQuad(t)) * maxOffset;
+                        float timeIntoScrollToStart =
+                            currentTimeInCycle -
+                            (pauseAtStartDuration + scrollToEndDuration +
+                             pauseAtEndDuration);
+                        float normalizedScrollProgress =
+                            timeIntoScrollToStart / scrollToStartDuration;
 
-                        if (normalizedTime > 0.99f)
-                        {
-                            listView->textScrollPause = pauseDuration;
-                        }
+                        button->textScrollOffset =
+                            (1.0f -
+                             pgb_easeInOutQuad(normalizedScrollProgress)) *
+                            maxOffset;
                     }
                 }
-
                 listView->needsDisplay = true;
             }
             else
