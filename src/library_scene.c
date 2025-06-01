@@ -294,8 +294,8 @@ static void PGB_LibraryScene_update(void *object)
                             int textY = screenHeight / 2;
 
                             playdate->graphics->drawText(
-                                message, pgb_strlen(message), kUTF8Encoding, textX,
-                                textY);
+                                message, pgb_strlen(message), kUTF8Encoding,
+                                textX, textY);
                         }
 
                         playdate->graphics->freeBitmap(coverImage);

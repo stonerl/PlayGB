@@ -107,6 +107,12 @@ void PGB_present(PGB_Scene *scene)
     PGB_App->pendingScene = scene;
 }
 
+void PGB_goToLibrary(void)
+{
+    PGB_LibraryScene *libraryScene = PGB_LibraryScene_new();
+    PGB_present(libraryScene->scene);
+}
+
 void PGB_quit(void)
 {
     preferences_save_to_disk();

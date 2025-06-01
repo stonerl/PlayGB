@@ -11,7 +11,6 @@
 #include "../peanut_gb/peanut_gb.h"
 #include "app.h"
 #include "dtcm.h"
-#include "library_scene.h"
 #include "preferences.h"
 #include "revcheck.h"
 
@@ -1135,8 +1134,7 @@ static void PGB_GameScene_didSelectLibrary(void *userdata)
 
     gameScene->audioLocked = true;
 
-    PGB_LibraryScene *libraryScene = PGB_LibraryScene_new();
-    PGB_present(libraryScene->scene);
+    PGB_goToLibrary();
 }
 
 static void PGB_GameScene_didToggleLCD(void *userdata)

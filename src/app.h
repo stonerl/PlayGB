@@ -49,6 +49,7 @@ void PGB_init(void);
 void PGB_update(float dt);
 void PGB_present(PGB_Scene *scene);
 void PGB_quit(void);
+void PGB_goToLibrary(void);
 
 // allocates in DTCM region (if enabled).
 // note, there is no associated free.
