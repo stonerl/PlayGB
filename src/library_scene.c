@@ -7,6 +7,9 @@
 
 #include "library_scene.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "app.h"
 #include "game_scene.h"
 #include "preferences.h"
@@ -69,6 +72,14 @@ static void PGB_LibraryScene_listFiles(const char *filename, void *userdata)
     }
 }
 
+static int compareGamesByDisplayName(const void *a, const void *b)
+{
+    PGB_Game *gameA = *(PGB_Game **)a;
+    PGB_Game *gameB = *(PGB_Game **)b;
+
+    return strcmp(gameA->displayName, gameB->displayName);
+}
+
 static void PGB_LibraryScene_reloadList(PGB_LibraryScene *libraryScene)
 {
     for (int i = 0; i < libraryScene->games->length; i++)
@@ -81,6 +92,13 @@ static void PGB_LibraryScene_reloadList(PGB_LibraryScene *libraryScene)
 
     playdate->file->listfiles(PGB_gamesPath, PGB_LibraryScene_listFiles,
                               libraryScene, 0);
+
+    if (libraryScene->games->length > 1)
+    {
+        qsort(libraryScene->games->items, libraryScene->games->length,
+              sizeof(PGB_Game *),  // The array stores pointers to PGB_Game
+              compareGamesByDisplayName);
+    }
 
     PGB_Array *items = libraryScene->listView->items;
 
