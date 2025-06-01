@@ -1149,102 +1149,126 @@ static void PGB_GameScene_didToggleLCD(void *userdata)
 static void PGB_GameScene_menu(void *object)
 {
     PGB_GameScene *gameScene = object;
-    
-    if (gameScene->rom_filename != NULL) {
+
+    if (gameScene->rom_filename != NULL)
+    {
         char *rom_basename = string_copy(gameScene->rom_filename);
         char *last_slash = strrchr(rom_basename, '/');
-        if (last_slash != NULL) {
+        if (last_slash != NULL)
+        {
             memmove(rom_basename, last_slash + 1, strlen(last_slash + 1) + 1);
         }
-        
+
         const char *gamesPath = PGB_gamesPath;
         char *coverPath = NULL;
-        
+
         char *basename = string_copy(rom_basename);
         char *ext = strrchr(basename, '.');
-        if (ext != NULL) {
+        if (ext != NULL)
+        {
             *ext = '\0';
         }
-        
+
         char *cleanName = string_copy(basename);
         char *p = cleanName;
-        while (*p) {
-            if (*p == ' ' || *p == '(' || *p == ')' || *p == '[' || *p == ']' || 
-                *p == '{' || *p == '}' || *p == '!' || *p == '?' || *p == ':' || 
-                *p == ';' || *p == ',' || *p == '&' || *p == '\'') {
+        while (*p)
+        {
+            if (*p == ' ' || *p == '(' || *p == ')' || *p == '[' || *p == ']' ||
+                *p == '{' || *p == '}' || *p == '!' || *p == '?' || *p == ':' ||
+                *p == ';' || *p == ',' || *p == '&' || *p == '\'')
+            {
                 *p = '_';
             }
             p++;
         }
-        
+
         FileStat fileStat;
         bool found = false;
-        
-        playdate->system->formatString(&coverPath, "%s/%s.pdi", gamesPath, cleanName);
-        if (playdate->file->stat(coverPath, &fileStat) == 0) {
+
+        playdate->system->formatString(&coverPath, "%s/%s.pdi", gamesPath,
+                                       cleanName);
+        if (playdate->file->stat(coverPath, &fileStat) == 0)
+        {
             found = true;
         }
-        
-        if (!found) {
-            if (coverPath != NULL) {
+
+        if (!found)
+        {
+            if (coverPath != NULL)
+            {
                 pgb_free(coverPath);
             }
-            
-            playdate->system->formatString(&coverPath, "%s/%s.pdi", gamesPath, basename);
+
+            playdate->system->formatString(&coverPath, "%s/%s.pdi", gamesPath,
+                                           basename);
         }
-        
-        if (coverPath != NULL && playdate->file->stat(coverPath, &fileStat) == 0) {
-            LCDBitmap *originalImage = playdate->graphics->loadBitmap(coverPath, NULL);
-            if (originalImage != NULL) {
+
+        if (coverPath != NULL &&
+            playdate->file->stat(coverPath, &fileStat) == 0)
+        {
+            LCDBitmap *originalImage =
+                playdate->graphics->loadBitmap(coverPath, NULL);
+            if (originalImage != NULL)
+            {
                 int originalWidth, originalHeight;
-                playdate->graphics->getBitmapData(originalImage, &originalWidth, &originalHeight, NULL, NULL, NULL);
-                
-                LCDBitmap *menuImage = playdate->graphics->newBitmap(400, 240, kColorClear);
-                if (menuImage != NULL) {
+                playdate->graphics->getBitmapData(originalImage, &originalWidth,
+                                                  &originalHeight, NULL, NULL,
+                                                  NULL);
+
+                LCDBitmap *menuImage =
+                    playdate->graphics->newBitmap(400, 240, kColorClear);
+                if (menuImage != NULL)
+                {
                     int targetWidth = 200;
                     int targetHeight = 200;
                     float scale = 1.0f;
-                    
-                    if (originalWidth > 0 && originalHeight > 0) {
+
+                    if (originalWidth > 0 && originalHeight > 0)
+                    {
                         float scaleX = (float)targetWidth / originalWidth;
                         float scaleY = (float)targetHeight / originalHeight;
                         scale = scaleX < scaleY ? scaleX : scaleY;
                     }
-                    
+
                     int scaledWidth = originalWidth * scale;
                     int scaledHeight = originalHeight * scale;
-                    
+
                     int drawX = (targetWidth - scaledWidth) / 2;
-                    int drawY = 40 + (160 - scaledHeight) / 2; 
+                    int drawY = 40 + (160 - scaledHeight) / 2;
 
                     playdate->graphics->pushContext(menuImage);
-                    
+
                     playdate->graphics->fillRect(0, 0, 400, 40, kColorBlack);
                     playdate->graphics->fillRect(0, 200, 400, 40, kColorBlack);
-                    
-                    playdate->graphics->drawScaledBitmap(originalImage, drawX, drawY, scale, scale);
+
+                    playdate->graphics->drawScaledBitmap(originalImage, drawX,
+                                                         drawY, scale, scale);
                     playdate->graphics->popContext();
-                    
-                    playdate->system->logToConsole("Setting menu image: %s (scaled to 400x240)", coverPath);
+
+                    playdate->system->logToConsole(
+                        "Setting menu image: %s (scaled to 400x240)",
+                        coverPath);
                     playdate->system->setMenuImage(menuImage, 0);
                     playdate->graphics->freeBitmap(menuImage);
                 }
-                
+
                 playdate->graphics->freeBitmap(originalImage);
             }
         }
-        
+
         pgb_free(cleanName);
         pgb_free(basename);
         pgb_free(rom_basename);
-        if (coverPath != NULL) {
+        if (coverPath != NULL)
+        {
             pgb_free(coverPath);
         }
     }
-    
-    playdate->system->addMenuItem("Library", PGB_GameScene_didSelectLibrary, gameScene);
-    
-    if(gameScene->state == PGB_GameSceneStateLoaded)
+
+    playdate->system->addMenuItem("Library", PGB_GameScene_didSelectLibrary,
+                                  gameScene);
+
+    if (gameScene->state == PGB_GameSceneStateLoaded)
     {
         playdate->system->addMenuItem("Save", PGB_GameScene_didSelectSave,
                                       gameScene);

@@ -3915,7 +3915,8 @@ exit:
     return inst_cycles;
 }
 
-__core_section("short") static bool __gb_get_op_flag(struct gb_s *restrict gb, uint8_t op8)
+__core_section("short") static bool __gb_get_op_flag(struct gb_s *restrict gb,
+                                                     uint8_t op8)
 {
     op8 %= 4;
     bool flag = (op8 <= 1) ? gb->cpu_reg.f_bits.z : gb->cpu_reg.f_bits.c;
@@ -3923,7 +3924,8 @@ __core_section("short") static bool __gb_get_op_flag(struct gb_s *restrict gb, u
     return flag;
 }
 
-__core_section("short") static u16 __gb_add16(struct gb_s *restrict gb, u16 a, u16 b)
+__core_section("short") static u16
+    __gb_add16(struct gb_s *restrict gb, u16 a, u16 b)
 {
     unsigned temp = a + b;
     gb->cpu_reg.f_bits.n = 0;

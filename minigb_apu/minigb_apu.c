@@ -705,7 +705,7 @@ __audio int audio_callback(void *context, int16_t *left, int16_t *right,
     {
         return 0;
     }
-    
+
     __builtin_prefetch(left, 1);
     __builtin_prefetch(right, 1);
 
@@ -713,9 +713,11 @@ __audio int audio_callback(void *context, int16_t *left, int16_t *right,
     struct chan *c2 = chans + 1;
     struct chan *c3 = chans + 2;
     struct chan *c4 = chans + 3;
-    
-    // 256, rounded up to replication
-    #define MAX_CHUNK (((256+AUDIO_SAMPLE_REPLICATION-1)/AUDIO_SAMPLE_REPLICATION)*AUDIO_SAMPLE_REPLICATION)
+
+// 256, rounded up to replication
+#define MAX_CHUNK                                                        \
+    (((256 + AUDIO_SAMPLE_REPLICATION - 1) / AUDIO_SAMPLE_REPLICATION) * \
+     AUDIO_SAMPLE_REPLICATION)
     while (len > 0)
     {
         int chunksize = len >= MAX_CHUNK ? MAX_CHUNK : len;
@@ -727,13 +729,14 @@ __audio int audio_callback(void *context, int16_t *left, int16_t *right,
 
         for (int i = 0; i < chunksize; i += AUDIO_SAMPLE_REPLICATION)
         {
-            for (int j = i; j < i + AUDIO_SAMPLE_REPLICATION && j < chunksize; ++j)
+            for (int j = i; j < i + AUDIO_SAMPLE_REPLICATION && j < chunksize;
+                 ++j)
             {
                 left[j] = left[i];
                 right[j] = right[i];
             }
         }
-        
+
         len -= chunksize;
         left += chunksize;
         right += chunksize;

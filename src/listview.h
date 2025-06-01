@@ -83,7 +83,7 @@ typedef struct
     float crankResetTime;
     bool needsDisplay;
     PDRect frame;
-    
+
     float textScrollTime;
     float textScrollPause;
 } PGB_ListView;
