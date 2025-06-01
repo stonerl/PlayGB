@@ -96,7 +96,8 @@ static void PGB_LibraryScene_reloadList(PGB_LibraryScene *libraryScene)
     {
         PGB_Game *game = libraryScene->games->items[i];
 
-        PGB_ListItemButton *itemButton = PGB_ListItemButton_new(game->filename);
+        PGB_ListItemButton *itemButton =
+            PGB_ListItemButton_new(game->displayName);
         array_push(items, itemButton->item);
     }
 
@@ -467,6 +468,7 @@ PGB_Game *PGB_Game_new(const char *filename)
         *ext = '\0';
     }
 
+    game->displayName = string_copy(basename);
     char *cleanName = string_copy(basename);
     char *p = cleanName;
     while (*p)
@@ -519,6 +521,7 @@ void PGB_Game_free(PGB_Game *game)
     pgb_free(game->filename);
     pgb_free(game->fullpath);
     pgb_free(game->coverPath);
+    pgb_free(game->displayName);
 
     pgb_free(game);
 }

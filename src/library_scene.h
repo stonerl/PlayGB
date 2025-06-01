@@ -31,6 +31,7 @@ typedef struct
     char *filename;
     char *fullpath;
     char *coverPath;
+    char *displayName
 } PGB_Game;
 
 typedef struct PGB_LibraryScene

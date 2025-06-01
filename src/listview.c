@@ -467,8 +467,7 @@ void PGB_ListView_draw(PGB_ListView *listView)
             int indicatorLineWidth = 1;
 
             PDRect indicatorFillRect =
-                PDRectMake(listView->frame.width - PGB_ListView_scrollInset -
-                               PGB_ListView_scrollIndicatorWidth,
+                PDRectMake(listX + PGB_ListView_scrollInset,
                            listView->scroll.indicatorOffset,
                            PGB_ListView_scrollIndicatorWidth,
                            listView->scroll.indicatorHeight);
